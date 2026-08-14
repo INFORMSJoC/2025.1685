@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.ipynb_checkpoints/
+.env
+.venv/
+venv/
+tmp/
+*.sqlite3
+
+# Large files/data
+*.rar
