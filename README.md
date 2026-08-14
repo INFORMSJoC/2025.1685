@@ -94,15 +94,20 @@ Response-search reformulation:
 
 ```bash
 python scripts/run_tables_3_4_response_search.py
-ODMTS_DATA_DIR=data/table_4_medium_instances python scripts/run_tables_3_4_response_search.py
+python scripts/run_tables_3_4_response_search.py --table 4
 ```
 
-KKT, KKT+VI, SD, and SD+VI reformulations:
+KKT, KKT+VI, SD, and SD+VI reformulations for Table 3; only SD and SD+VI
+for Table 4:
 
 ```bash
-python scripts/run_tables_3_4_single_level_benchmarks.py --Single_Level_timelimit 600
-ODMTS_DATA_DIR=data/table_4_medium_instances python scripts/run_tables_3_4_single_level_benchmarks.py --Single_Level_timelimit 3600
+python scripts/run_tables_3_4_single_level_benchmarks.py
+python scripts/run_tables_3_4_single_level_benchmarks.py --table 4
 ```
+
+The runners default to Table 3 and 600 seconds. Selecting `--table 4`
+automatically selects the Table 4 inputs and the 3600-second limit. Use
+`--time-limit` only to override the paper's limit.
 
 For the preprocessing columns with 2, 4, 8, and 16 cores, run the RS command
 under the corresponding Linux CPU affinity or job-scheduler allocation. Use
@@ -111,7 +116,7 @@ under the corresponding Linux CPU affinity or job-scheduler allocation. Use
 ### Table 5
 
 ```bash
-python scripts/run_table_5_large_instances.py --CCG_timelimit 3600
+python scripts/run_table_5_large_instances.py
 ```
 
 This script runs Cuts, RS, RS+Cuts, and RS+Cuts+Stab configurations on the six
@@ -120,7 +125,7 @@ large instances.
 ### Tables 6-8
 
 ```bash
-python scripts/run_tables_6_8_case_study.py --CCG_timelimit 43200
+python scripts/run_tables_6_8_case_study.py
 python scripts/build_tables_6_7_case_study.py
 python scripts/build_table_8_theta_sensitivity.py
 ```
@@ -144,7 +149,7 @@ python scripts/build_figure_4_response_iterations.py
 ### Table 9
 
 ```bash
-python scripts/run_table_9_callback_comparison.py --CCG_timelimit 3600
+python scripts/run_table_9_callback_comparison.py
 ```
 
 ## Results

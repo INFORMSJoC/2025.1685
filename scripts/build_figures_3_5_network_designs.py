@@ -34,7 +34,7 @@ def plot_map():
     long_max = -83.565814
     lat_min = 42.181508
     lat_max = 42.316971
-    # 坐标格式为：[左上角纬度，左上角经度，右下角纬度，右下角经度]
+    # The coordinate format is: [top left latitude, top left longitude, bottom right latitude, bottom right longitude]
     bounds = [lat_max + 0.02, long_min, lat_min, long_max]
     bounds_plot = [bounds[1], bounds[2], bounds[3], bounds[0]]
     zoom_num = 13
@@ -46,7 +46,6 @@ def plot_map():
     x_rect = [long_min-cor_offset, long_max+cor_offset, long_max+cor_offset, long_min-cor_offset]
     y_rect = [lat_min-cor_offset, lat_min-cor_offset, lat_max+cor_offset, lat_max+cor_offset]
 
-    # 使用fill函数填充灰色透明矩形
     plt.fill(x_rect, y_rect, color='whitesmoke', alpha=0.4)
 
 def plot_income_map():
@@ -148,7 +147,7 @@ def plot_shuttle_trips(income='All'):
 
 
     colors = plt.get_cmap('tab10').colors  # + plt.get_cmap('tab20b').colors + plt.get_cmap('tab20c').colors
-    colors = list(colors) * (700 // len(colors) + 1)  # 确保有足够多的颜色
+    colors = list(colors) * (700 // len(colors) + 1)  # ensure that there are sufficient colors
 
 
     x1_cor = [dict_node_lon[dict_trip_ori[r]] for r in trip_by_bus]
@@ -295,17 +294,15 @@ if __name__ == '__main__':
                         opened_hub.sort()
                         hub_set_color = ['salmon', 'forestgreen', 'navy', 'deepskyblue', 'darkorange', 'purple', 'deeppink', 'black', 'gold', 'brown', 'green']
 
-                        # if sol_type in ['stoch', 'single_leader']:
-                        #     list_sce = list(set([key[0] for key in y_sol.keys()]))
-                        # else:
-                        #     list_sce = list(set([key[0] for key in y_sol.keys()]))[0]
-                        # list_sce.sort()
-                        list_sce = [1]  # TODO: delete when results are all correct
+                        if sol_type in ['stoch', 'single_leader']:
+                            list_sce = list(set([key[0] for key in y_sol.keys()]))
+                        else:
+                            list_sce = list(set([key[0] for key in y_sol.keys()]))[0]
+                        list_sce.sort()
+                        # list_sce = [1]  # Dra results of only the first scenario
 
                         if use_map:
                             for s in list_sce:
-                                # figure_name = '{}-scenario_{}-usemap_{}-soltype_{}-income_{}.jpg'.format(data_file_use[-12:-5], s,
-                                #                                                               use_map, sol_type, income_req)
                                 figure_name = 'theta_{}-{}.jpg'.format(theta_value, sol_type)
                                 figure_name = os.path.join(figure_folder, figure_name)
                                 print('plot... ',s)

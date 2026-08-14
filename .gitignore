@@ -6,6 +6,8 @@ __pycache__/
 *.ipynb_checkpoints/
 .env
 .venv/
+venv/
+tmp/
 *.sqlite3
 
 # Large files/data

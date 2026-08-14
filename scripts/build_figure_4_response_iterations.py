@@ -3,7 +3,7 @@
   Author: Author
   Email : liusuri@mail.dlut.edu.cn
    Time : 2025/7/8 16:57
-Function: draw the distribution of the number of iterations in the tree-search algorithm
+Function: draw the distribution of the number of iterations in the tree-search algorithm. The results are in ../results\figures\figure_4
 """
 
 
@@ -18,8 +18,6 @@ folder = os.path.join(ROOT, 'results', 'raw', 'figure_4')
 figure_folder = os.path.join(ROOT, 'results', 'figures', 'figure_4')
 
 list_file = [os.path.join(folder, i) for i in os.listdir(folder) if 'search_iter' in i]
-
-# list_file = [os.path.join(folder, 'node81-hub4-tripN2000-scenario30-time2025-06-05-14-49-27_search_iter.json')]
 
 for data_path in list_file:
     find_int_num = re.findall(r'\d+', os.path.basename(data_path))

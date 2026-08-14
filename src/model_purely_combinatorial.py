@@ -3,7 +3,7 @@
   Author: Author
   Email : liusuri@mail.dlut.edu.cn
    Time : 2024/12/26 16:30
-Function: 1) This code redefines the cutting plane algorithm in model_parallel.py.
+Function: 1) This code redefines the cutting plan algorithm in model_parallel.py.
           2) Combinatorial cuts are added for a follower when the response search algorithm explores all its responses.
           3) the class IterateComb is used for evaluating the efficiency of the response search and cutting plane algorithms in the manuscript
 """
@@ -17,9 +17,8 @@ import re
 import json
 import pandas as pd
 import time
-from model_parallel import VarValue, SubModel, SubShortestPathWithStrongDualModel
+from model_parallel import VarValue, SubShortestPathWithStrongDualModel
 import argparse
-from multiprocessing.pool import ThreadPool
 import multiprocessing as mp
 import numpy as np
 from matplotlib import pyplot as plt
@@ -34,12 +33,11 @@ def get_parser():
     parser.add_argument("--CCG_timelimit", type=int, help="time limit of CCG algo", default=3600*12)
     parser.add_argument("--MP_timelimit", type=int, help="time limit of MP", default=720)  # spend less time on MP. The i-ccg algo will solve MP repeatedly when required.
     parser.add_argument("--use_i_ccg", type=int, help="whether use i-CCG algo", default=True)
-    parser.add_argument("--MP_gap_scale", type=int, help="MIPGap = MIP * scale", default=0.15)
-    parser.add_argument("--inexact_gap_threshold", type=int, help="inexact_gap_threshold", default=0.05)
-    parser.add_argument("--stop_gap", type=int, help="stop gap CCG", default=1e-5)
-    parser.add_argument("--MP_ini_gap", type=int, help="initial gap of MP", default=0.1)
+    parser.add_argument("--MP_gap_scale", type=float, help="MIPGap = MIP * scale", default=0.15)
+    parser.add_argument("--inexact_gap_threshold", type=float, help="inexact_gap_threshold", default=0.05)
+    parser.add_argument("--stop_gap", type=float, help="stop gap CCG", default=1e-5)
+    parser.add_argument("--MP_ini_gap", type=float, help="initial gap of MP", default=0.1)
 
-    parser.add_argument("--Single_Level_timelimit", type=int, help="timelimit of single level algo rithm", default=3600)
 
     return parser
 
@@ -271,8 +269,10 @@ class RoutineFinder():
 
             return result
 
+
+
 class MasterModel():
-    def __init__(self, data: Modeldata, agg_cut: bool, solution_appro: bool = False, agg_cut_part=False, on_linux=False,
+    def __init__(self, data: Modeldata, agg_cut: bool, agg_cut_part=False, on_linux=False,
                  use_mdl_copy=False, copy_mdl=None, n_leg_trip=None, s_r_l=None, prefered_hubs=None,
                                   prefered_leader_obj=None,
                                   original_leader_obj=None):
@@ -283,7 +283,7 @@ class MasterModel():
         :param linux: whether the code runs on Linux Server
         """
         parser = get_parser()
-        self.args = parser.parse_args()
+        self.args, _ = parser.parse_known_args()
         self.original_MIP_gap = self.args.MP_ini_gap  # for i-CCG
         self.MIP_gap = self.args.MP_ini_gap  # initial MIP Gap, if use i-ccg, also solve MP to optimal at first iterations
         self.MP_timelimit = self.args.MP_timelimit  # initial MP time limit
@@ -292,7 +292,6 @@ class MasterModel():
 
         self.data = data
         self.agg_cut = agg_cut
-        self.solution_appro = solution_appro
         self.agg_cut_part = agg_cut_part
         self.on_linux = on_linux
         self.n_leg_trip = n_leg_trip
@@ -319,7 +318,8 @@ class MasterModel():
                 # model_to_disk_file = os.path.join(upper_2_dir, 'model2disk')  # write the model to disk instead of memory
                 # self.model.setParam('NodefileDir', model_to_disk_file)
                 # self.model.setParam('NodefileStart', 0.45)  # 当使用内存达到45%时开始写入磁盘
-            self.var = self.Variable(model=self.model, data=data, agg_cut=agg_cut, solution_appro=self.solution_appro, agg_cut_part=agg_cut_part, s_r_l=self.s_r_l)
+            self.var = self.Variable(model=self.model, data=data, agg_cut=agg_cut,
+                                     agg_cut_part=agg_cut_part, s_r_l=self.s_r_l)
             self.cons = self.Constraint()
             self.add_constraints()
             self.add_constr_explored_sp()
@@ -362,7 +362,7 @@ class MasterModel():
     class Variable():
         """class of variables"""
 
-        def __init__(self, model, data: Modeldata, agg_cut: bool, solution_appro: bool, agg_cut_part=False, s_r_l=None):
+        def __init__(self, model, data: Modeldata, agg_cut: bool, agg_cut_part=False, s_r_l=None):
             # vars in the master problem
             self.z = model.addVars(data.Hub_pairs, vtype=GRB.BINARY, name='z')
             for h,l in data.Hub_pairs:
@@ -400,23 +400,6 @@ class MasterModel():
                                       vtype=GRB.BINARY, name='beta_comb')  # whether the leg is selected
 
 
-            # if solution_appro == 'primal':
-            #     self.theta1 = model.addVars(
-            #         gp.tuplelist((s, r, i) for s in data.Scenarios for r in data.Trips for i in data.Node),
-            #         vtype=GRB.CONTINUOUS, lb=-GRB.INFINITY, name='theta1')
-            #     self.theta2 = model.addVars(
-            #         gp.tuplelist((s, r, h, l) for s in data.Scenarios for r in data.Trips for (h, l) in data.Hub_pairs),
-            #         vtype=GRB.CONTINUOUS, name='theta2')
-            #     self.theta3 = model.addVars(
-            #         gp.tuplelist((s, r, h, l) for s in data.Scenarios for r in data.Trips for (h, l) in data.Hub_pairs),
-            #         vtype=GRB.CONTINUOUS, name='theta3')
-            #     self.theta4 = model.addVars(gp.tuplelist(
-            #         (s, r, i, j) for s in data.Scenarios for r in data.Trips for (i, j) in data.Node_pairs_for_mdl_sp[r]),
-            #                                 vtype=GRB.CONTINUOUS, name='theta4')
-            #     self.delta = model.addVars(
-            #         gp.tuplelist((s, r, h, l) for s in data.Scenarios for r in data.Trips for (h, l) in data.Hub_pairs),
-            #         vtype=GRB.CONTINUOUS, name='delta')
-
 
     class Constraint():
         """class of constraint"""
@@ -438,9 +421,8 @@ class MasterModel():
             self.var.z[h, l] for l in self.data.Hub if (h, l) in self.data.Hub_pairs) == gp.quicksum(
             self.var.z[l, h] for l in self.data.Hub if (l, h) in self.data.Hub_pairs) for h in
                                                         self.data.Hub), name='flow_balance')
-        if self.solution_appro == 'primal':
-            with open(self.console_output_file, 'a') as file:
-                print('\t\tadd primal special constraints...', file=file)
+        with open(self.console_output_file, 'a') as file:
+            print('\t\tadd primal special constraints...', file=file)
             # self.cons.theta_cons_1 = self.model.addConstrs((-self.var.theta1[s, r, h] + self.var.theta1[s, r, l] -
             #                                                 self.var.theta2[s, r, h, l] - self.var.theta3[s, r, h, l] <=
             #                                                 self.data.tao_follower[h, l, s] for s in self.data.Scenarios
@@ -544,74 +526,6 @@ class MasterModel():
         self.model.addConstr(self.obj >= lb, name='obj_lb')
 
 
-    def add_var_and_cons_ccg_dual(self, varValue, s, r):
-        """
-        add column and constraints given s and r
-        :param varValue: to obtain the value of vars pi and t
-        :param s: scenario
-        :param r: trip
-        :param algo_type: 'dual': CCG based on dual sub models; 'primal': CCG based on primal sub models
-        :return: no return
-        """
-        theta1_name = 'theta1_{}_{}_{}'.format(s, r, self.var.n_iters)
-        self.var.theta1[theta1_name] = self.model.addVars(self.data.Node_of_trip[r], vtype=GRB.CONTINUOUS, lb=-GRB.INFINITY,
-                                                          name=theta1_name)
-        theta2_name = 'theta2_{}_{}_{}'.format(s, r, self.var.n_iters)
-        self.var.theta2[theta2_name] = self.model.addVars(self.data.Hub_pairs, vtype=GRB.CONTINUOUS, name=theta2_name)
-        theta3_name = 'theta3_{}_{}_{}'.format(s, r, self.var.n_iters)
-        self.var.theta3[theta3_name] = self.model.addVars(self.data.Hub_pairs, vtype=GRB.CONTINUOUS, name=theta3_name)
-        theta4_name = 'theta4_{}_{}_{}'.format(s, r, self.var.n_iters)
-        self.var.theta4[theta4_name] = self.model.addVars(self.data.Node_pairs_for_mdl_sp[r], vtype=GRB.CONTINUOUS, name=theta4_name)
-        delta_name = 'delta_{}_{}_{}'.format(s, r, self.var.n_iters)
-        self.var.delta[delta_name] = self.model.addVars(self.data.Hub_pairs, vtype=GRB.CONTINUOUS, name=delta_name)
-
-        if self.agg_cut:
-            if self.agg_cut_part:
-                raise "undeveloped: partly aggregated cut in add_var_and_cons_ccg_dual"
-            else:
-                self.var.gamma_RHS += self.data.Scenarios_prob[s] * self.data.Trip_p_amount[s,r] * (
-                            -varValue.pi1[s, r, self.data.Trip_origin[r]] + varValue.pi1[s, r,
-                    self.data.Trip_destination[r]] - gp.quicksum(
-                        self.var.z[h, l] * varValue.pi2[s, r, h, l] for (h, l) in self.data.Hub_pairs) - gp.quicksum(
-                        varValue.pi3[s, r, h, l] for (h, l) in self.data.Hub_pairs) - gp.quicksum(
-                        varValue.pi4[s, r, i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r]) + self.var.theta1[theta1_name][
-                                self.data.Trip_origin[r]] - self.var.theta1[theta1_name][
-                                self.data.Trip_destination[r]] + gp.quicksum(
-                        self.var.delta[delta_name]) + gp.quicksum(
-                        self.var.theta3[theta3_name]) + gp.quicksum(self.var.theta4[theta4_name]))
-        else:
-            self.cons.gamma_lb['gamma_lb_{}_{}_{}'.format(s, r, self.var.n_iters)] = self.model.addConstr(
-                self.var.gamma[s, r] >= -varValue.pi1[s, r, self.data.Trip_origin[r]] + varValue.pi1[s, r,
-                self.data.Trip_destination[r]] - gp.quicksum(
-                    self.var.z[h, l] * varValue.pi2[s, r, h, l] for (h, l) in self.data.Hub_pairs) - gp.quicksum(
-                    varValue.pi3[s, r, h, l] for (h, l) in self.data.Hub_pairs) - gp.quicksum(
-                    varValue.pi4[s, r, i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r]) + self.var.theta1[theta1_name][
-                    self.data.Trip_origin[r]] - self.var.theta1[theta1_name][
-                    self.data.Trip_destination[r]] + gp.quicksum(
-                    self.var.delta[delta_name]) + gp.quicksum(
-                    self.var.theta3[theta3_name]) + gp.quicksum(self.var.theta4[theta4_name]),
-                name='gamma_lb_{}_{}_{}'.format(s,r,self.var.n_iters))
-
-        self.cons.theta_cons_1['theta_cons_1_{}_{}_{}'.format(s,r,self.var.n_iters)] = self.model.addConstrs((
-            -self.var.theta1[theta1_name][h] + self.var.theta1[theta1_name][l] - self.var.theta2[theta2_name][h, l] -
-            self.var.theta3[theta3_name][h, l] <= self.data.tao_follower[h, l, s] * varValue.t[s, r] for (h, l) in
-            self.data.Hub_pairs), name='theta_cons_1_{}_{}_{}'.format(s,r,self.var.n_iters))
-        self.cons.theta_cons_2['theta_cons_2_{}_{}_{}'.format(s,r,self.var.n_iters)] = self.model.addConstrs((
-            -self.var.theta1[theta1_name][i] + self.var.theta1[theta1_name][j] - self.var.theta4[theta4_name][i, j] <=
-            self.data.gamma_follower[i, j, s] * varValue.t[s, r] for (i, j) in self.data.Node_pairs_for_mdl_sp[r]),
-            name='theta_cons_2_{}_{}_{}'.format(s,r,self.var.n_iters))
-        self.cons.delta_lin_1['delta_lin_1_{}_{}_{}'.format(s,r,self.var.n_iters)] = self.model.addConstrs((
-            self.var.delta[delta_name][h, l] <= self.var.z[h, l] * self.data.bigM for (h, l) in self.data.Hub_pairs),
-            name='delta_lin_1_{}_{}_{}'.format(s,r,self.var.n_iters))
-
-        self.cons.delta_lin_2['delta_lin_2_{}_{}_{}'.format(s,r,self.var.n_iters)] = self.model.addConstrs((
-            self.var.delta[delta_name][h, l] <= self.var.theta2[theta2_name][h, l] for (h, l) in self.data.Hub_pairs),
-            name='delta_lin_2_{}_{}_{}'.format(s,r,self.var.n_iters))
-
-        self.cons.delta_lin_3['delta_lin_3_{}_{}_{}'.format(s, r, self.var.n_iters)] = self.model.addConstrs((
-            self.var.delta[delta_name][h, l] >= self.var.theta2[theta2_name][h, l] - self.data.bigM * (
-                    1 - self.var.z[h, l]) for (h, l) in self.data.Hub_pairs),
-            name='delta_lin_3_{}_{}_{}'.format(s, r, self.var.n_iters))
 
     def add_combinatorial_cut(self, varValue, s, r):
         """
@@ -889,8 +803,8 @@ class MasterModel():
         self.MP_timelimit = ccg_time_limit
         self.model.setParam('MIPGap', 0)  # MIP Gap
 
-    def update_master_timelimit_1_h(self):
-        self.model.setParam('TimeLimit', 3600)
+    def update_master_timelimit(self, time_limit):
+        self.model.setParam('TimeLimit', time_limit)
         self.model.setParam('MIPGap', 1e-5)
 
     def present_solutions(self):
@@ -908,16 +822,13 @@ class IterateComb:
     - Use CCG cuts for data.Sce_trip_unexplored
     """
 
-    def __init__(self, data: Modeldata, agg_cut: bool=False, use_lp_basis=False, parallel_method='normal',
-                 solution_appro='dual', primal_based_dual_to_ini=False, agg_cut_part=False, solve_MP_use_Benders=False,
-                 use_mdl_copy=False, copy_mdl=None, revise_dual_value=False, n_tree_iter_max=100):
+    def __init__(self, data: Modeldata, parallel_method='normal', revise_dual_value=False,
+                 n_tree_iter_max=100):
         """
         :param data:
-        :param agg_cut:
-        :param use_lp_basis: use lp basis as warm start
-        :param parallel_method: 'normal': solve in sequence; 'thread': threading; 'process': multiprocessing
-        :param solution_appro: 'dual': approach1, based on dual formulation; 'primal': approach 2, based on primal formulation
-        :param primal_based_dual_to_ini: use primal approach, but also solve dual at the initail scenario
+        :param parallel_method: 'normal': persistent subproblem models;
+                                'process': multiprocessing;
+                                'sequential': rebuild and solve one subproblem at a time
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)
@@ -935,21 +846,16 @@ class IterateComb:
                            self.data.Sce_Trip}  # number of potential legs per subproblem (s,r)
         self.s_r_l = [(s, r, l) for s, r in data.Sce_Trip for l in range(self.n_leg_trip[s, r]) if
                       self.n_leg_trip[s, r] > 0]  # set (s,r,l) where l is the number of potential bus routines in problem s,r
-        self.agg_cut = agg_cut
-        self.use_lp_basis = use_lp_basis
+        self.agg_cut = False
+        self.use_lp_basis = False
         self.parallel_method = parallel_method
-        self.solve_MP_use_Benders = solve_MP_use_Benders
         self.record = {}  # store the solution information
 
-        if self.parallel_method not in ['normal', 'thread', 'process', 'process_1_core']:
+        if self.parallel_method not in ['normal', 'process', 'sequential']:
             with open(self.console_output_file, 'a') as file:
                 print('Unknown parallel method: {}, please confirm. Using normal instead'.format(self.parallel_method), file=file)
             self.parallel_method = 'normal'
 
-        self.solution_appro = solution_appro
-        if self.solution_appro not in ['primal', 'dual']:
-            raise 'unknown parameter solution_appro in function start_Benders_iteration()'
-        self.primal_based_dual_to_ini = primal_based_dual_to_ini
         self.revise_dual_value = revise_dual_value
 
         with open(self.console_output_file, 'a') as file:
@@ -962,25 +868,17 @@ class IterateComb:
         with open(self.console_output_file, 'a') as file:
             print('create MP model...', file=file)
         tmp = time.time()
-        if not self.solve_MP_use_Benders:
-            self.MP = MasterModel(data=self.data, agg_cut=agg_cut, solution_appro=self.solution_appro,
-                                  agg_cut_part=agg_cut_part, on_linux=self.run_in_linux_server,
-                                  use_mdl_copy=use_mdl_copy, copy_mdl=copy_mdl, n_leg_trip=self.n_leg_trip,
-                                  s_r_l=self.s_r_l, prefered_hubs=self.prefered_hubs,
-                                  prefered_leader_obj=self.prefered_leader_obj,
-                                  original_leader_obj=self.original_leader_obj)
-        else:
-            with open(self.console_output_file, 'a') as file:
-                print('\t\tSolve MP with Benders is not correct. Exit.', file=file)
-            exit()
+        self.MP = MasterModel(data=self.data, agg_cut=False,
+                              on_linux=self.run_in_linux_server, n_leg_trip=self.n_leg_trip,
+                              s_r_l=self.s_r_l, prefered_hubs=self.prefered_hubs,
+                              prefered_leader_obj=self.prefered_leader_obj,
+                              original_leader_obj=self.original_leader_obj)
         self.time_MP_creation = time.time() - tmp  # time cost including adding vars and constrs
 
         with open(self.console_output_file, 'a') as file:
             print('\t\tdeclare empty lists and dicts...', file=file)
         tmp_s = time.time()
         self.s_c_cut_stat = {(s,r):0 for (s,r) in self.data.Sce_Trip}
-        self.dict_SP = {}  # for approach 1
-        self.dict_SP_dual = {}  # for approach 2
         self.dict_SP_primal = {}  # for approach 2
         self.dict_originalSP = {}
         self.dict_CCGSP = {}
@@ -1044,575 +942,195 @@ class IterateComb:
 
 
     def create_submodels(self):
-        if self.solution_appro == 'dual':
-            if self.parallel_method in ['normal', 'thread']:
-                # created model in advance only in normal and thread parallel
-                for s in self.data.Scenarios:
-                    for r in self.data.Trips:
-                        self.dict_SP[s, r] = SubModel(data=self.data, s=s, r=r)
-                        self.dict_SP[s, r].declare_model()
-            elif self.parallel_method in ['process', 'process_1_core']:
-                self.SP_template = SubModel(data=self.data, s=self.data.Scenarios[0], r=self.data.Trips[0])
-        elif self.solution_appro == 'primal':
-            if self.parallel_method in ['normal', 'thread']:
-                # created model in advance only in normal and thread parallel
-                for s in self.data.Scenarios:
-                    for r in self.data.Trips:
-                        self.dict_SP_primal[s, r] = SubShortestPathWithStrongDualModel(data=self.data, s=s, r=r)
-                        self.dict_SP_primal[s, r].declare_model()
-                for r in self.data.Trips:
-                    # only create one dual-based model
-                    self.dict_SP_dual[self.data.Scenarios[0], r] = SubModel(data=self.data, s=self.data.Scenarios[0], r=r)
-                    self.dict_SP_dual[self.data.Scenarios[0], r].declare_model()
-
-            elif self.parallel_method in ['process', 'process_1_core']:
-                self.SP_template_dual = SubModel(data=self.data, s=self.data.Scenarios[0], r=self.data.Trips[0])
-                self.SP_template_primal = SubShortestPathWithStrongDualModel(data=self.data, s=self.data.Scenarios[0],
-                                                                             r=self.data.Trips[0])
-
-    def solve_subproblems_primal(self, n_iters, use_dual_also:bool=True, need_x = False, revise_dual_value=False):
-        """solve subproblems: approach 2 based on primal formulation
-        :param use_dual_also: use dual info to warm start
-        """
-        if self.parallel_method == 'normal':
-            time_update_SP = 0
-            time_record_solve_SP = 0
-            time_retrieve_SP_solution = 0
-            # in the first iteration, solve without warmstart
-            for s,r in self.data.Sce_Trip_unexplored:
-                # for r in self.data.Trips:
-                if not use_dual_also:  # solve only primal models
-                    tmp = time.time()
-                    self.dict_SP_primal[s,r].update_objective_cons(param_z=self.varValue.z)
-                    time_update_SP += time.time() - tmp
-
-                    tmp = time.time()
-                    if self.use_lp_basis:
-                        self.dict_SP_primal[s, r].write_lp_basis_info(True, self.SP_VBasis.get(r, None),
-                                                                      self.SP_CBasis.get(r, None))
-                    else:
-                        self.dict_SP_primal[s, r].write_lp_basis_info()
-                    time_update_SP += time.time() - tmp
-                    tmp = time.time()
-                    self.dict_SP_primal[s, r].model.optimize()
-                    time_record_solve_SP += time.time() - tmp
-                    tmp = time.time()
-                    self.dict_SP_primal[s, r].change_obj()  # change obj to leader params
-                    time_update_SP += time.time() - tmp
-                    tmp = time.time()
-                    self.dict_SP_primal[s, r].model.optimize()
-                    time_record_solve_SP += time.time() - tmp
-                    tmp = time.time()
-                    result_primal = self.dict_SP_primal[s, r].obtain_solution_info(self.use_lp_basis)
-                    time_retrieve_SP_solution += time.time() - tmp
-
-                    tmp = time.time()
-                    self.varValue.update_Sub_var_primal(s, r,
-                                                        x = result_primal['x'],
-                                                        y = result_primal['y'],
-                                                        pi1=result_primal['pi1'],
-                                                        pi2=result_primal['pi2'],
-                                                        pi3=result_primal['pi3'],
-                                                        pi4=result_primal['pi4'],
-                                                        t=result_primal['t'],
-                                                        obj=result_primal['obj'])#,
-                                                        # VBasis=result_primal['VBasis'],
-                                                        # CBasis=result_primal['CBasis']
-                    time_retrieve_SP_solution += time.time() - tmp
-
-
-                else:
-                    with open(self.console_output_file, 'a') as f:
-                        print('This function is not verified yet: Solve Subproblems using dual info.', file=f)
-
-
-
-            self.time_update_SP.append(time_update_SP)
-            self.time_record_solve_SP.append(time_record_solve_SP)
-            self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
-
-        elif self.parallel_method == 'process':
-            time_record_solve_SP = 0
-            time_retrieve_SP_solution = 0
-            tmp = time.time()
-            if (not use_dual_also) or (use_dual_also and n_iters == 1):
-            # use only primal model
-                # solve scenario 1 and get warm start info
-                pool = mp.Pool(processes=ALLOW_CORE)
-                if not revise_dual_value:
-                    if self.use_lp_basis:
-                        # if use lp basis as warm start
-                        result = pool.starmap(self.SP_template_primal.create_and_solve_by_with,
-                                              [(self.data.Scenarios[0], r, self.varValue.z, True, self.SP_VBasis.get(r, None),
-                                                self.SP_CBasis.get(r, None), True) for r in
-                                               self.data.Trips if (self.data.Scenarios[0],r) in self.data.Sce_Trip_unexplored])
-                    else:
-                        result = pool.starmap(self.SP_template_primal.create_and_solve_by_with,
-                                              [(self.data.Scenarios[0], r, self.varValue.z, False, None, None, True) for r in
-                                               self.data.Trips if (self.data.Scenarios[0],r) in self.data.Sce_Trip_unexplored])
-                else:
-                    """Revise the value of dual variables"""
-                    # solve primal to get smaller dual var
-                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with_revise_dual,
-                                          [(self.data.Scenarios[0], r, self.varValue.z) for r in
-                                           self.data.Trips if (self.data.Scenarios[0],r) in self.data.Sce_Trip_unexplored])
-
-                pool.close()
-                pool.join()
-                time_record_solve_SP += time.time() - tmp
-
-                tmp = time.time()
-                result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-                for r in self.data.Trips:
-                    if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
-                        item = result_dict[self.data.Scenarios[0], r]
-                        if self.use_lp_basis:
-                            VBasis_info = {
-                                'pi1': [item['pi1'][k] for k in self.data.Node_of_trip[r]],
-                                'pi2': [item['pi2'][h, l] for (h, l) in self.data.Hub_pairs],
-                                'pi3': [item['pi3'][h, l] for (h, l) in self.data.Hub_pairs],
-                                'pi4': [item['pi4'][i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r]],
-                                't': item['t']
-                            }
-                            self.VBasis_info[r] = VBasis_info.copy()  # VBasis for dual model
-                            self.SP_VBasis[r] = item['VBasis']  # V and C Basis for primal model
-                            self.SP_CBasis[r] = item['CBasis']
-
-                        self.varValue.update_Sub_var_primal(self.data.Scenarios[0], r,
-                                                                x=item['x'],
-                                                                y=item['y'],
-                                                                pi1=item['pi1'],
-                                                                pi2=item['pi2'],
-                                                                pi3=item['pi3'],
-                                                                pi4=item['pi4'],
-                                                                t=item['t'],
-                                                                obj=item['obj'])#,
-                                                                # VBasis=item['VBasis'],
-                                                                # CBasis=item['CBasis'])
-                time_retrieve_SP_solution += time.time() - tmp
-
-                # then solve remaining scenarios
-                tmp = time.time()
-                pool = mp.Pool(processes=ALLOW_CORE)
-                if not revise_dual_value:
-                    if self.use_lp_basis:
-                        # if use lp basis as warm start
-                        result = pool.starmap(self.SP_template_primal.create_and_solve_by_with,
-                                              [(s, r, self.varValue.z, True,
-                                                self.SP_VBasis[r],
-                                                self.SP_CBasis[r]) for s in self.data.Scenarios[1:] for r in
-                                               self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
-                    else:
-                        result = pool.starmap(self.SP_template_primal.create_and_solve_by_with,
-                                              [(s, r, self.varValue.z) for s in self.data.Scenarios[1:] for r in
-                                               self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
-                else:
-                    """Revise the value of dual variables"""
-                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with_revise_dual,
-                                          [(s, r, self.varValue.z) for s in self.data.Scenarios[1:] for r in
-                                           self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
-                pool.close()
-                pool.join()
-                time_record_solve_SP += time.time() - tmp
-
-
-                tmp = time.time()
-                result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-                for r in self.data.Trips:
-                    for s in self.data.Scenarios[1:]:
-                        if (s, r) in self.data.Sce_Trip_unexplored:
-                            item = result_dict[s, r]
-                            self.varValue.update_Sub_var_primal(s, r,
-                                                                x=item['x'],
-                                                                y=item['y'],
-                                                                pi1=item['pi1'],
-                                                                pi2=item['pi2'],
-                                                                pi3=item['pi3'],
-                                                                pi4=item['pi4'],
-                                                                t=item['t'],
-                                                                obj=item['obj'])  # ,
-                                                                # VBasis=item['VBasis'],
-                                                                # CBasis=item['CBasis'])
-
-                time_retrieve_SP_solution += time.time() - tmp
-
-            else:
-                # solve scenario[0] first
-                tmp = time.time()
-                pool = mp.Pool(processes=ALLOW_CORE)
-                if self.use_lp_basis:
-                    # if use lp basis as warm start
-                    result = pool.starmap(self.SP_template_dual.create_and_solve_by_with,
-                                          [(self.data.Scenarios[0], r, self.varValue.z, True, None, None,
-                                            self.VBasis_info[r]) for r in self.data.Trips if (self.data.Scenarios[0],r) in self.data.Sce_Trip_unexplored])
-                else:
-                    result = pool.starmap(self.SP_template_dual.create_and_solve_by_with,
-                                          [(self.data.Scenarios[0], r, self.varValue.z) for r in
-                                           self.data.Trips if (self.data.Scenarios[0],r) in self.data.Sce_Trip_unexplored])
-                pool.close()
-                pool.join()
-                time_record_solve_SP += time.time() - tmp
-
-                tmp = time.time()
-                result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-                for r in self.data.Trips:
-                    if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
-                        item = result_dict[self.data.Scenarios[0], r]
-                        self.varValue.update_Sub_var_primal(self.data.Scenarios[0], r,
-                                                                x=item['x'],
-                                                                y=item['y'],
-                                                                pi1=item['pi1'],
-                                                                pi2=item['pi2'],
-                                                                pi3=item['pi3'],
-                                                                pi4=item['pi4'],
-                                                                t=item['t'],
-                                                                obj=item['obj'])#,
-                                                                # VBasis=None,
-                                                                # CBasis=None)
-                        if self.use_lp_basis:
-                            self.SP_VBasis[r] = list(item['x'].values()) + list(item['y'].values())
-                time_retrieve_SP_solution += time.time() - tmp
-
-                # then solve remaining scenarios
-                tmp = time.time()
-                pool = ThreadPool(processes=ALLOW_CORE)
-                if self.use_lp_basis:
-                    # if use lp basis as warm start
-                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with,
-                                          [(s, r, self.varValue.z, True, self.SP_VBasis[r],
-                                            None) for s in self.data.Scenarios[1:] for r in
-                                           self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
-                else:
-                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with,
-                                          [(s, r, self.varValue.z) for s in self.data.Scenarios[1:] for r in
-                                           self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
-                pool.close()
-                pool.join()
-                time_record_solve_SP += time.time() - tmp
-
-                tmp = time.time()
-                result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-                for r in self.data.Trips:
-                    for s in self.data.Scenarios[1:]:
-                        if (s, r) in self.data.Sce_Trip_unexplored:
-                            item = result_dict[s, r]
-                            self.varValue.update_Sub_var_primal(s, r,
-                                                                    x=item['x'],
-                                                                    y=item['y'],
-                                                                    pi1=item['pi1'],
-                                                                    pi2=item['pi2'],
-                                                                    pi3=item['pi3'],
-                                                                    pi4=item['pi4'],
-                                                                    t=item['t'],
-                                                                    obj=item['obj'])#,
-                                                                    # VBasis=item['VBasis'],
-                                                                    # CBasis=item['CBasis'])
-                time_retrieve_SP_solution += time.time() - tmp
-
-            self.time_record_solve_SP.append(time_record_solve_SP)
-            self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
-            self.time_update_SP.append(0)  # no such steps
-
-        elif self.parallel_method == 'process_1_core':
-            time_record_solve_SP = 0
-            time_retrieve_SP_solution = 0
-            tmp = time.time()
-            if (not use_dual_also) or (use_dual_also and n_iters == 1):
-                # use only primal model
-                # solve scenario 1 and get warm start info
-                result = []
-                s = self.data.Scenarios[0]
-                if not revise_dual_value:
-                    for r in self.data.Trips:
-                        if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
-                            res = self.SP_template_primal.create_and_solve_by_with(s, r, self.varValue.z,False, None, None, True)
-                            result.append(res)
-                else:
-                    """Revise the value of dual variables"""
-                    # solve primal to get smaller dual var
-                    for r in self.data.Trips:
-                        if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
-                            res = self.SP_template_primal.create_and_solve_by_with_revise_dual(s, r, self.varValue.z,)
-                            result.append(res)
-
-                tmp = time.time()
-                result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-                for r in self.data.Trips:
-                    if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
-                        item = result_dict[self.data.Scenarios[0], r]
-                        if self.use_lp_basis:
-                            VBasis_info = {
-                                'pi1': [item['pi1'][k] for k in self.data.Node_of_trip[r]],
-                                'pi2': [item['pi2'][h, l] for (h, l) in self.data.Hub_pairs],
-                                'pi3': [item['pi3'][h, l] for (h, l) in self.data.Hub_pairs],
-                                'pi4': [item['pi4'][i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r]],
-                                't': item['t']
-                            }
-                            self.VBasis_info[r] = VBasis_info.copy()  # VBasis for dual model
-                            self.SP_VBasis[r] = item['VBasis']  # V and C Basis for primal model
-                            self.SP_CBasis[r] = item['CBasis']
-
-                        self.varValue.update_Sub_var_primal(self.data.Scenarios[0], r,
-                                                            x=item['x'],
-                                                            y=item['y'],
-                                                            pi1=item['pi1'],
-                                                            pi2=item['pi2'],
-                                                            pi3=item['pi3'],
-                                                            pi4=item['pi4'],
-                                                            t=item['t'],
-                                                            obj=item['obj'])  # ,
-                        time_record_solve_SP += item['sol_time']
-                time_retrieve_SP_solution += time.time() - tmp
-
-                # then solve remaining scenarios
-                result = []
-                tmp = time.time()
-                if not revise_dual_value:
-                    for s in self.data.Scenarios[1:]:
-                        for r in self.data.Trips:
-                            if (s,r) in self.data.Sce_Trip_unexplored:
-                                res = self.SP_template_primal.create_and_solve_by_with(s, r, self.varValue.z)
-                                result.append(res)
-
-                else:
-                    """Revise the value of dual variables"""
-                    for s in self.data.Scenarios[1:]:
-                        for r in self.data.Trips:
-                            if (s,r) in self.data.Sce_Trip_unexplored:
-                                res = self.SP_template_primal.create_and_solve_by_with_revise_dual(s, r, self.varValue.z)
-                                result.append(res)
-
-
-
-                tmp = time.time()
-                result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-                for r in self.data.Trips:
-                    for s in self.data.Scenarios[1:]:
-                        if (s, r) in self.data.Sce_Trip_unexplored:
-                            item = result_dict[s, r]
-                            self.varValue.update_Sub_var_primal(s, r,
-                                                                x=item['x'],
-                                                                y=item['y'],
-                                                                pi1=item['pi1'],
-                                                                pi2=item['pi2'],
-                                                                pi3=item['pi3'],
-                                                                pi4=item['pi4'],
-                                                                t=item['t'],
-                                                                obj=item['obj'])  # ,
-                            # VBasis=item['VBasis'],
-                            # CBasis=item['CBasis'])
-                            time_record_solve_SP += item['sol_time']
-
-                time_retrieve_SP_solution += time.time() - tmp
-
-                self.time_record_solve_SP.append(time_record_solve_SP)
-                self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
-                self.time_update_SP.append(0)  # no such steps
-            else:
-                raise 'process_1_core, but use dual also. Not developed.'
-        else:
-            raise 'unknown parallel method in function solve_subproblems_primal()'
-
-    def solve_subproblems_dual(self):
-        # solve the sub problem
-        time_update_SP = 0
-        time_record_solve_SP = 0
-        time_retrieve_SP_solution = 0
         if self.parallel_method == 'normal':
             for s in self.data.Scenarios:
                 for r in self.data.Trips:
-                    tmp = time.time()
-                    self.dict_SP[s, r].update_objective_cons(param_z=self.varValue.z)
-                    time_update_SP += time.time() - tmp
+                    self.dict_SP_primal[s, r] = SubShortestPathWithStrongDualModel(
+                        data=self.data, s=s, r=r)
+                    self.dict_SP_primal[s, r].declare_model()
+        elif self.parallel_method in ['process', 'sequential']:
+            self.SP_template_primal = SubShortestPathWithStrongDualModel(
+                data=self.data, s=self.data.Scenarios[0], r=self.data.Trips[0])
 
-                    tmp = time.time()
-                    if self.use_lp_basis:
-                        self.dict_SP[s, r].write_lp_basis_info(True, self.SP_VBasis.get(r, None), self.SP_CBasis.get(r, None))
-                    else:
-                        self.dict_SP[s, r].write_lp_basis_info()
-                    time_record_solve_SP += time.time() - tmp
-
-                    tmp = time.time()
-                    self.dict_SP[s,r].model.optimize()
-                    time_record_solve_SP += time.time() - tmp
-
-                    tmp = time.time()
-                    result = self.dict_SP[s,r].obtain_solution_info(self.use_lp_basis)
-                    time_retrieve_SP_solution += time.time() - tmp
-
-                    tmp = time.time()
-                    self.varValue.update_Sub_var(s=s, r=r, pi1=result['pi1'], pi2=result['pi2'], pi3=result['pi3'],
-                                                 pi4=result['pi4'], t=result['t'], obj=result['obj'])  # update sub vars for the model under scenario r and trip t
-                    time_retrieve_SP_solution += time.time() - tmp
-
-            self.time_update_SP.append(time_update_SP)
-            self.time_record_solve_SP.append(time_record_solve_SP)
-            self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
-
-        elif self.parallel_method == 'thread':
+    def solve_subproblems_primal(self, n_iters, need_x=False, revise_dual_value=False):
+        """Solve primal subproblems using the selected execution mode."""
+        if self.parallel_method == 'normal':
             time_update_SP = 0
             time_record_solve_SP = 0
             time_retrieve_SP_solution = 0
-            # solve scenario 1
-            # update
-            tmp = time.time()
-            pool = ThreadPool(processes=ALLOW_CORE)
-            if self.use_lp_basis:
-                pool.starmap(self.aux_solve_parallel_update,
-                                      [(self.data.Scenarios[0], r, True, self.SP_VBasis.get(r, None),
-                                        self.SP_CBasis.get(r, None), None) for r in self.data.Trips])
-            else:
-                pool.starmap(self.aux_solve_parallel_update,
-                                      [(self.data.Scenarios[0], r) for r in self.data.Trips])
-            pool.close()
-            pool.join()
-            time_update_SP += time.time() - tmp
-
-            # solve
-            tmp = time.time()
-            pool = ThreadPool(processes=ALLOW_CORE)
-            pool.starmap(self.aux_solve_parallel_optimize,
-                         [(self.data.Scenarios[0], r) for r in self.data.Trips])
-            time_record_solve_SP += time.time() - tmp
-
-            # obtain info
-            tmp = time.time()
-            pool = ThreadPool(processes=ALLOW_CORE)
-            result = pool.starmap(self.aux_solve_parallel_retrieval,
-                         [(self.data.Scenarios[0], r, self.use_lp_basis) for r in self.data.Trips])
-            time_retrieve_SP_solution += time.time() - tmp
-
-            tmp = time.time()
-            result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-            for r in self.data.Trips:
-                item = result_dict[self.data.Scenarios[0],r]
-                self.varValue.update_Sub_var(s=self.data.Scenarios[0], r=r, pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'],
-                                             pi4=item['pi4'], t=item['t'], obj=item['obj'])
+            for s, r in self.data.Sce_Trip_unexplored:
+                tmp = time.time()
+                self.dict_SP_primal[s, r].update_objective_cons(param_z=self.varValue.z)
+                time_update_SP += time.time() - tmp
+                tmp = time.time()
                 if self.use_lp_basis:
-                    self.SP_VBasis[r] = item['VBasis']
-                    self.SP_CBasis[r] = item['CBasis']
-            time_retrieve_SP_solution += time.time() - tmp
-
-            # solve remaining scenarios
-            # update
-            tmp = time.time()
-            pool = ThreadPool(processes=ALLOW_CORE)
-            if self.use_lp_basis:
-                pool.starmap(self.aux_solve_parallel_update,
-                             [(s, r, True, self.SP_VBasis.get(r, None),
-                               self.SP_CBasis.get(r, None), None) for s in self.data.Scenarios[1:] for r in self.data.Trips])
-            else:
-                pool.starmap(self.aux_solve_parallel_update,
-                             [(s, r) for s in self.data.Scenarios[1:] for r in self.data.Trips])
-            pool.close()
-            pool.join()
-            time_update_SP += time.time() - tmp
-
-            # solve
-            tmp = time.time()
-            pool = ThreadPool(processes=ALLOW_CORE)
-            pool.starmap(self.aux_solve_parallel_optimize,
-                         [(s, r) for s in self.data.Scenarios[1:] for r in self.data.Trips])
-            time_record_solve_SP += time.time() - tmp
-
-            # obtain info
-            tmp = time.time()
-            pool = ThreadPool(processes=ALLOW_CORE)
-            result = pool.starmap(self.aux_solve_parallel_retrieval,
-                                  [(s, r, self.use_lp_basis) for s in self.data.Scenarios[1:] for r in self.data.Trips])
-            time_retrieve_SP_solution += time.time() - tmp
-
-            tmp = time.time()
-            result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-            for s in self.data.Scenarios[1:]:
-                for r in self.data.Trips:
-                    item = result_dict[s, r]
-                    self.varValue.update_Sub_var(s=s, r=r, pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'],
-                                                 pi4=item['pi4'], t=item['t'], obj=item['obj'])
-            time_retrieve_SP_solution += time.time() - tmp
-
+                    self.dict_SP_primal[s, r].write_lp_basis_info(True, self.SP_VBasis.get(r, None), self.SP_CBasis.get(r, None))
+                else:
+                    self.dict_SP_primal[s, r].write_lp_basis_info()
+                time_update_SP += time.time() - tmp
+                tmp = time.time()
+                self.dict_SP_primal[s, r].model.optimize()
+                time_record_solve_SP += time.time() - tmp
+                tmp = time.time()
+                self.dict_SP_primal[s, r].change_obj()
+                time_update_SP += time.time() - tmp
+                tmp = time.time()
+                self.dict_SP_primal[s, r].model.optimize()
+                time_record_solve_SP += time.time() - tmp
+                tmp = time.time()
+                result_primal = self.dict_SP_primal[s, r].obtain_solution_info(self.use_lp_basis)
+                time_retrieve_SP_solution += time.time() - tmp
+                tmp = time.time()
+                self.varValue.update_Sub_var_primal(s, r, x=result_primal['x'], y=result_primal['y'], pi1=result_primal['pi1'], pi2=result_primal['pi2'], pi3=result_primal['pi3'], pi4=result_primal['pi4'], t=result_primal['t'], obj=result_primal['obj'])
+                time_retrieve_SP_solution += time.time() - tmp
             self.time_update_SP.append(time_update_SP)
             self.time_record_solve_SP.append(time_record_solve_SP)
             self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
-
-
         elif self.parallel_method == 'process':
-            # solve scenario 1 and get warm start information
             time_record_solve_SP = 0
             time_retrieve_SP_solution = 0
             tmp = time.time()
             pool = mp.Pool(processes=ALLOW_CORE)
-            with open(self.console_output_file, 'a') as file:
-                print('\t\tstart to solve sp in parallel - the first scenario', file=file)
-            if self.use_lp_basis:
-                # if use lp basis as warm start
-                result = pool.starmap(self.SP_template.create_and_solve_by_with,
-                                      [(self.data.Scenarios[0], r, self.varValue.z, True, self.SP_VBasis.get(r, None),
-                                        self.SP_CBasis.get(r, None)) for r in
-                                       self.data.Trips if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored])
+            if not revise_dual_value:
+                if self.use_lp_basis:
+                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with, [(self.data.Scenarios[0], r, self.varValue.z, True, self.SP_VBasis.get(r, None), self.SP_CBasis.get(r, None), True) for r in self.data.Trips if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored])
+                else:
+                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with, [(self.data.Scenarios[0], r, self.varValue.z, False, None, None, True) for r in self.data.Trips if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored])
             else:
-                result = pool.starmap(self.SP_template.create_and_solve_by_with,
-                                      [(self.data.Scenarios[0], r, self.varValue.z) for r in
-                                       self.data.Trips if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored])
+                'Revise the value of dual variables'
+                result = pool.starmap(self.SP_template_primal.create_and_solve_by_with_revise_dual, [(self.data.Scenarios[0], r, self.varValue.z) for r in self.data.Trips if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored])
             pool.close()
             pool.join()
             time_record_solve_SP += time.time() - tmp
-
-            with open(self.console_output_file, 'a') as file:
-                print('\t\tstart to arrange results from sp', file=file)
             tmp = time.time()
             result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-
-            with open(self.console_output_file, 'a') as file:
-                print('\t\trecord solutions', file=file)
             for r in self.data.Trips:
                 if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
-                    item = result_dict[self.data.Scenarios[0],r]
-                    self.varValue.update_Sub_var(s=self.data.Scenarios[0], r=r, pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'],
-                                                 pi4=item['pi4'], t=item['t'], obj=item['obj'])
+                    item = result_dict[self.data.Scenarios[0], r]
                     if self.use_lp_basis:
+                        VBasis_info = {'pi1': [item['pi1'][k] for k in self.data.Node_of_trip[r]], 'pi2': [item['pi2'][h, l] for h, l in self.data.Hub_pairs], 'pi3': [item['pi3'][h, l] for h, l in self.data.Hub_pairs], 'pi4': [item['pi4'][i, j] for i, j in self.data.Node_pairs_for_mdl_sp[r]], 't': item['t']}
+                        self.VBasis_info[r] = VBasis_info.copy()
                         self.SP_VBasis[r] = item['VBasis']
                         self.SP_CBasis[r] = item['CBasis']
+                    self.varValue.update_Sub_var_primal(self.data.Scenarios[0], r, x=item['x'], y=item['y'], pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'], pi4=item['pi4'], t=item['t'], obj=item['obj'])
             time_retrieve_SP_solution += time.time() - tmp
-
-            with open(self.console_output_file, 'a') as file:
-                print('\t\tstart to solve sp in parallem - scenario >= 2', file=file)
-            # then solve remaining scenarios
             tmp = time.time()
             pool = mp.Pool(processes=ALLOW_CORE)
-            if self.use_lp_basis:
-                # if use lp basis as warm start
-                result = pool.starmap(self.SP_template.create_and_solve_by_with,
-                                      [(s, r, self.varValue.z, True, self.SP_VBasis[r],
-                                        self.SP_CBasis[r]) for s in self.data.Scenarios[1:] for r in
-                                       self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
+            if not revise_dual_value:
+                if self.use_lp_basis:
+                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with, [(s, r, self.varValue.z, True, self.SP_VBasis[r], self.SP_CBasis[r]) for s in self.data.Scenarios[1:] for r in self.data.Trips if (s, r) in self.data.Sce_Trip_unexplored])
+                else:
+                    result = pool.starmap(self.SP_template_primal.create_and_solve_by_with, [(s, r, self.varValue.z) for s in self.data.Scenarios[1:] for r in self.data.Trips if (s, r) in self.data.Sce_Trip_unexplored])
             else:
-                result = pool.starmap(self.SP_template.create_and_solve_by_with,
-                                      [(s, r, self.varValue.z) for s in self.data.Scenarios[1:] for r in
-                                       self.data.Trips if (s,r) in self.data.Sce_Trip_unexplored])
+                'Revise the value of dual variables'
+                result = pool.starmap(self.SP_template_primal.create_and_solve_by_with_revise_dual, [(s, r, self.varValue.z) for s in self.data.Scenarios[1:] for r in self.data.Trips if (s, r) in self.data.Sce_Trip_unexplored])
             pool.close()
             pool.join()
             time_record_solve_SP += time.time() - tmp
-
-            with open(self.console_output_file, 'a') as file:
-                print('\t\tarrange results - scenario>=2', file=file)
             tmp = time.time()
             result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
-            for s in self.data.Scenarios[1:]:
-                for r in self.data.Trips:
+            for r in self.data.Trips:
+                for s in self.data.Scenarios[1:]:
                     if (s, r) in self.data.Sce_Trip_unexplored:
                         item = result_dict[s, r]
-                        self.varValue.update_Sub_var(s=s, r=r, pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'],
-                                                     pi4=item['pi4'], t=item['t'], obj=item['obj'])
-
+                        self.varValue.update_Sub_var_primal(s, r, x=item['x'], y=item['y'], pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'], pi4=item['pi4'], t=item['t'], obj=item['obj'])
             time_retrieve_SP_solution += time.time() - tmp
-
-
             self.time_record_solve_SP.append(time_record_solve_SP)
             self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
-            self.time_update_SP.append(0)  # no such steps
+            self.time_update_SP.append(0)
+        elif self.parallel_method == 'sequential':
+            time_record_solve_SP = 0
+            time_retrieve_SP_solution = 0
+            tmp = time.time()
+            result = []
+            s = self.data.Scenarios[0]
+            if not revise_dual_value:
+                for r in self.data.Trips:
+                    if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
+                        res = self.SP_template_primal.create_and_solve_by_with(s, r, self.varValue.z, False, None, None, True)
+                        result.append(res)
+            else:
+                'Revise the value of dual variables'
+                for r in self.data.Trips:
+                    if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
+                        res = self.SP_template_primal.create_and_solve_by_with_revise_dual(s, r, self.varValue.z)
+                        result.append(res)
+            tmp = time.time()
+            result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
+            for r in self.data.Trips:
+                if (self.data.Scenarios[0], r) in self.data.Sce_Trip_unexplored:
+                    item = result_dict[self.data.Scenarios[0], r]
+                    if self.use_lp_basis:
+                        VBasis_info = {'pi1': [item['pi1'][k] for k in self.data.Node_of_trip[r]], 'pi2': [item['pi2'][h, l] for h, l in self.data.Hub_pairs], 'pi3': [item['pi3'][h, l] for h, l in self.data.Hub_pairs], 'pi4': [item['pi4'][i, j] for i, j in self.data.Node_pairs_for_mdl_sp[r]], 't': item['t']}
+                        self.VBasis_info[r] = VBasis_info.copy()
+                        self.SP_VBasis[r] = item['VBasis']
+                        self.SP_CBasis[r] = item['CBasis']
+                    self.varValue.update_Sub_var_primal(self.data.Scenarios[0], r, x=item['x'], y=item['y'], pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'], pi4=item['pi4'], t=item['t'], obj=item['obj'])
+                    time_record_solve_SP += item['sol_time']
+            time_retrieve_SP_solution += time.time() - tmp
+            result = []
+            tmp = time.time()
+            if not revise_dual_value:
+                for s in self.data.Scenarios[1:]:
+                    for r in self.data.Trips:
+                        if (s, r) in self.data.Sce_Trip_unexplored:
+                            res = self.SP_template_primal.create_and_solve_by_with(s, r, self.varValue.z)
+                            result.append(res)
+            else:
+                'Revise the value of dual variables'
+                for s in self.data.Scenarios[1:]:
+                    for r in self.data.Trips:
+                        if (s, r) in self.data.Sce_Trip_unexplored:
+                            res = self.SP_template_primal.create_and_solve_by_with_revise_dual(s, r, self.varValue.z)
+                            result.append(res)
+            tmp = time.time()
+            result_dict = {list(item.keys())[0]: item[list(item.keys())[0]] for item in result}
+            for r in self.data.Trips:
+                for s in self.data.Scenarios[1:]:
+                    if (s, r) in self.data.Sce_Trip_unexplored:
+                        item = result_dict[s, r]
+                        self.varValue.update_Sub_var_primal(s, r, x=item['x'], y=item['y'], pi1=item['pi1'], pi2=item['pi2'], pi3=item['pi3'], pi4=item['pi4'], t=item['t'], obj=item['obj'])
+                        time_record_solve_SP += item['sol_time']
+            time_retrieve_SP_solution += time.time() - tmp
+            self.time_record_solve_SP.append(time_record_solve_SP)
+            self.time_retrieve_SP_solution.append(time_retrieve_SP_solution)
+            self.time_update_SP.append(0)
+        else:
+            raise 'unknown parallel method in function solve_subproblems_primal()'
 
 
+
+    # def aux_solve_parallel(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None, VBasis_info:dict=None):
+    #     """auxilary function, will be invoked in parallel computing"""
+    #     tmp = time.time()
+    #     self.dict_SP[s, r].update_objective_cons(param_z=self.varValue.z)
+    #     self.time_update_SP[-1] += time.time() - tmp
+    #
+    #     result = self.dict_SP[s, r].solve_model(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis, VBasis_info=VBasis_info)
+    #     self.time_record_solve_SP[-1] += result['t_optimize']
+    #     self.time_update_SP[-1] += result['t_update']
+    #
+    #     return {(s,r): result}
+
+    # def aux_solve_parallel_primal(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None):
+    #     """auxilary function, will be invoked in parallel computing"""
+    #     tmp = time.time()
+    #     self.dict_SP_primal[s, r].update_objective_cons(param_z=self.varValue.z)
+    #     self.time_update_SP[-1] += time.time() - tmp
+    #
+    #     self.dict_SP_primal[s, r].write_lp_basis_info()
+    #
+    #
+    #     self.dict_SP_primal[s, r].model.optimize()
+    #     self.dict_SP_primal[s, r].change_obj()  # change obj to leader params
+    #     self.dict_SP_primal[s, r].model.optimize()
+    #     result_primal = self.dict_SP_primal[s, r].obtain_solution_info()
+    #
+    #     result = self.dict_SP_primal[s, r].solve_model(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis)
+    #     self.time_record_solve_SP[-1] += result['t_optimize']
+    #     self.time_update_SP[-1] += result['t_update']
+    #
+    #     return {(s,r): result}
 
     def aux_solve_parallel_primal_update(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None):
         self.dict_SP_primal[s, r].update_objective_cons(param_z=self.varValue.z)
@@ -1631,29 +1149,6 @@ class IterateComb:
 
 
 
-    def aux_solve_parallel_dual_update(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None, VBasis_info:dict=None):
-        self.dict_SP_dual[s, r].update_objective_cons(param_z=self.varValue.z)
-        self.dict_SP_dual[s, r].write_lp_basis_info(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis, VBasis_info=VBasis_info)
-
-    def aux_solve_parallel_dual_optimize(self,s,r):
-        self.dict_SP_dual[s, r].model.optimize()
-
-    def aux_solve_parallel_dual_retrieval(self, s, r, use_lp_basis=False):
-        result = self.dict_SP_dual[s, r].obtain_solution_info(use_lp_basis=use_lp_basis)
-        return {(s, r): result}
-
-
-    def aux_solve_parallel_update(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None, VBasis_info:dict=None):
-        self.dict_SP[s, r].update_objective_cons(param_z=self.varValue.z)
-        self.dict_SP[s, r].write_lp_basis_info(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis, VBasis_info=VBasis_info)
-
-    def aux_solve_parallel_optimize(self,s,r):
-        self.dict_SP[s, r].model.optimize()
-
-    def aux_solve_parallel_retrieval(self, s, r, use_lp_basis=False):
-        result = self.dict_SP[s, r].obtain_solution_info(use_lp_basis=use_lp_basis)
-        return {(s, r): result}
-
     def assign_auxilary_var_lb(self, lb_dict):
         """
         add lb for each gamma(r,omega)
@@ -1662,13 +1157,15 @@ class IterateComb:
         for (s,r) in self.data.Sce_Trip_unexplored:
             self.MP.var.gamma[s,r].setAttr('lb', lb_dict.get((s,r), 0))
 
-    def solve_uncompleted_MILP(self):
+    def solve_uncompleted_MILP(self, time_limit):
         """
-        solve the MILP that includes only (s,r) fully explored by the tree-search algorithm
+        Solve the MILP containing only the (s, r) pairs fully explored by tree search.
+
+        :param time_limit: optimization time limit in seconds
         :return:
         """
         t_milp = time.time()
-        self.MP.update_master_timelimit_1_h()
+        self.MP.update_master_timelimit(time_limit)
         self.MP.model.optimize()
         t_milp = time.time() - t_milp
         lb = self.MP.model.ObjBound  # lower bound
@@ -1742,7 +1239,7 @@ class IterateComb:
         """
 
         parser = get_parser()
-        self.args = parser.parse_args()
+        self.args, _ = parser.parse_known_args()
         MP_gap_scale = self.args.MP_gap_scale  # decrease MP_gap by a certain scale
         inexact_gap_threshold = self.args.inexact_gap_threshold  # criteria of exploration/exploitation
         stop_gap = self.args.stop_gap
@@ -1773,9 +1270,6 @@ class IterateComb:
                         n_Benders_iter, lb, ub, best_ub, (best_ub - lb) / best_ub*100, sum(self.time_record_solve_MP)+sum(self.time_record_solve_SP), time.time() - start_time,
                         timelimit), file=file)
             n_Benders_iter += 1
-
-            if self.solve_MP_use_Benders:
-                self.MP_Benders.update_varValue(varValue=self.varValue)  # input varValue info
 
             # if time.time() - start_time > timelimit:
             if len(self.time_record_solve_MP) > 0:
@@ -1825,11 +1319,21 @@ class IterateComb:
 
             with open(self.console_output_file, 'a') as file:
                 print('solve sub...', file=file)
-            if self.solution_appro == 'dual':
-                self.solve_subproblems_dual()
-            elif self.solution_appro == 'primal':
-                self.solve_subproblems_primal(n_iters=n_Benders_iter, use_dual_also=self.primal_based_dual_to_ini, revise_dual_value=self.revise_dual_value)
+            self.solve_subproblems_primal(n_iters=n_Benders_iter, revise_dual_value=self.revise_dual_value)
 
+            # ii=0
+            # for (s, r) in self.data.Sce_Trip:
+            #     print('***s={}, r={}, subobj={:.4f}'.format(s, r, self.varValue.latest_sub_obj[s, r]))
+            #     ii += 1
+            #     if ii > 10:
+            #         break
+            # print('max_pi1={:.4f}'.format(max(self.varValue.pi1.values())))
+            # a = self.varValue.pi1.values()
+            # a = [-i for i in a]
+            # print('min_pi1=-{:.4f}'.format(max(a)))
+            # for (h,l) in self.data.Hub_pairs:
+            #     print('h={}, l={}, pi2={:.4f}'.format(h, l, self.varValue.pi2[h,l]))
+            # print('sum_pi2={:.4f}'.format(sum(self.varValue.pi2.values())))
 
             with open(self.console_output_file, 'a') as file:
                 print('calculate ub...', file=file)
@@ -1880,12 +1384,7 @@ class IterateComb:
                             #     print('\t\t\t s={},r={}, deviation betwwen $zeta$ and sub_obj={}'.format(s, r,
                             #                 self.varValue.latest_sub_obj[s, r] - self.varValue.gamma[s, r]), file=file)
                             # (add cut only when necessary) generate c & c in the master problem
-                            if self.solution_appro == 'dual':
-                                self.MP.add_var_and_cons_ccg_dual(varValue=self.varValue, s=s, r=r)
-                            elif self.solution_appro == 'primal':
-                                self.MP.add_var_and_cons_ccg_primal(varValue=self.varValue, s=s, r=r)
-                            else:
-                                raise 'unknown param solution_appro in function start_Benders_iteration()'
+                            self.MP.add_var_and_cons_ccg_primal(varValue=self.varValue, s=s, r=r)
                             if self.s_c_cut_stat[s,r] > 6:
                                 # this (s,r) pair probably added cut with too large coefficient, add combinatorial cut for assistance
                                 self.MP.add_combinatorial_cut(varValue=self.varValue, s=s, r=r)
@@ -1967,12 +1466,7 @@ class IterateComb:
 
                         # print('****add a cut')
                         # (add cut only when necessary) generate c & c in the master problem
-                        if self.solution_appro == 'dual':
-                            self.MP.add_var_and_cons_ccg_dual(varValue=self.varValue, s=s, r=r)
-                        elif self.solution_appro == 'primal':
-                            self.MP.add_var_and_cons_ccg_primal(varValue=self.varValue, s=s, r=r)
-                        else:
-                            raise 'unknown param solution_appro in function start_Benders_iteration()'
+                        self.MP.add_var_and_cons_ccg_primal(varValue=self.varValue, s=s, r=r)
                         self.n_cut_in_iter += 1
                 self.list_n_cut_in_iter.append(self.n_cut_in_iter)
 
@@ -1982,9 +1476,6 @@ class IterateComb:
             # record time consumption
             self.time_record.append(time.time() - loop_start_time)
 
-        # TODO 20241107: This calculation seems not necessary, delete it.
-        # if self.solution_appro == 'primal':
-        #     self.solve_subproblems_primal(n_iters=n_Benders_iter, use_dual_also=self.primal_based_dual_to_ini, need_x=True)
         self.update_cal_infor(n_Benders_iter=n_Benders_iter)
 
 
@@ -1995,7 +1486,7 @@ class IterateComb:
         """
 
         parser = get_parser()
-        self.args = parser.parse_args()
+        self.args, _ = parser.parse_known_args()
         stop_gap = self.args.stop_gap
         self.MP.set_params_additional_exact_ccg(ccg_time_limit=timelimit)  # set parameters to ensure MP is solved to optimal in each iteration
 
@@ -2054,7 +1545,7 @@ class IterateComb:
 
             with open(self.console_output_file, 'a') as file:
                 print('solve sub...', file=file)
-            self.solve_subproblems_primal(n_iters=n_Benders_iter, use_dual_also=self.primal_based_dual_to_ini, revise_dual_value=self.revise_dual_value)
+            self.solve_subproblems_primal(n_iters=n_Benders_iter, revise_dual_value=self.revise_dual_value)
 
             with open(self.console_output_file, 'a') as file:
                 print('calculate ub...', file=file)
@@ -2121,8 +1612,10 @@ class IterateComb:
             # solve subproblems
             with open(self.console_output_file, 'a') as file:
                 print('\t\t solve subproblems', file=file)
-            self.solve_subproblems_primal(n_iters=model._n_Benders_iter, use_dual_also=self.primal_based_dual_to_ini,
-                                    revise_dual_value=self.revise_dual_value)  # update self.varValue.latest_sub_obj
+            self.solve_subproblems_primal(
+                n_iters=model._n_Benders_iter,
+                revise_dual_value=self.revise_dual_value,
+            )  # update self.varValue.latest_sub_obj
 
             # update UB
             with open(self.console_output_file, 'a') as file:
@@ -2183,7 +1676,7 @@ class IterateComb:
         :return:
         """
         parser = get_parser()
-        self.args = parser.parse_args()
+        self.args, _ = parser.parse_known_args()
         stop_gap = self.args.stop_gap
         self.MP.set_params_additional_exact_ccg(ccg_time_limit=timelimit)  # set parameters to ensure MP is solved to optimal in each iteration
 
@@ -2204,8 +1697,19 @@ class IterateComb:
         self.MP.model.setParam('TimeLimit', 3*timelimit)  # 3 times of timelimit. Terminate the model until optimization time exceeds timelimit.
         self.MP.model.setParam('LazyConstraints', 1)  # 3 times of timelimit. Terminate the model until optimization time exceeds timelimit.
 
+        # while True:
         self.MP.model.optimize(self.bd_callback)
-
+            # check whether a cut is missed
+            # if self.MP.model.Status == GRB.OPTIMAL:
+                # update UB
+                # ub = 0
+                # for s in self.data.Scenarios:
+                #     for r in self.data.Trips:
+                #         # update upper bound
+                #         ub += self.data.Scenarios_prob[s] * self.data.Trip_p_amount[s, r] * \
+                #               self.varValue.latest_sub_obj[
+                #                   s, r]
+                # ub += sum(self.data.Beta_hl[h, l] * round(self.varValue.z[h, l]) for (h, l) in self.data.Hub_pairs)
 
         # with open(self.console_output_file, 'a') as file:
         #     print('\t\t ub={:.2f}, lb={:.2f}'.format(ub, self.LB_record[-1]), file=file)
@@ -2223,9 +1727,10 @@ class IterateComb:
             self.varValue.update_sp_obj_directly_from_mp_callback(gamma=gamma_value)
 
             # solve subproblems
-            self.solve_subproblems_primal(n_iters=self.MP.model._n_Benders_iter,
-                                          use_dual_also=self.primal_based_dual_to_ini,
-                                          revise_dual_value=self.revise_dual_value)
+            self.solve_subproblems_primal(
+                n_iters=self.MP.model._n_Benders_iter,
+                revise_dual_value=self.revise_dual_value,
+            )
             # update UB again using new self.varValue.latest_sub_obj
             ub = 0
             for s in self.data.Scenarios:
@@ -2244,6 +1749,16 @@ class IterateComb:
             self.update_cal_infor(n_Benders_iter=self.MP.model._n_Benders_iter, callback=True,
                                   node_count=self.record.get('n_node_BnB', None))
 
+        # else:
+        #     with open(self.console_output_file, 'a') as file:
+        #         print('\t\t Model terminated and optimality is achieved. Terminate.', file=file)
+        #     break
+
+
+
+
+
+        # if z_value != self.varValue.z or abs(model_bound - self.LB_record[-1]) > 1e-5:
 
 
     def update_cal_infor(self, n_Benders_iter, callback=False, node_count=None):
@@ -2289,8 +1804,7 @@ class IterateComb:
         result['Delta type'].append(self.data.Delta_type)
         result['parallel method'].append(self.parallel_method)
         result['lp warm start'].append(self.use_lp_basis)
-        result['solution approach'].append(self.solution_appro)
-        result['primal also dual'].append(self.primal_based_dual_to_ini)
+        result['solution approach'].append('primal')
         result['time read data'].append(read_data_time)
 
         result['time model creation'].append(record.get('time model creation', None))
@@ -2660,7 +2174,6 @@ if __name__ == '__main__':
               'Delta type': [],
               'lp warm start': [],
               'solution approach': [],
-              'primal also dual': [],
               'time read data': [],
               'time model creation': [],
               'solution time': [],
@@ -2695,6 +2208,7 @@ if __name__ == '__main__':
     file_list_original = [i for i in file_list if '.xlsx' in i]
     file_list = [os.path.join(file_path, f) for f in file_list_original]
     file_list.sort()
+    file_list = [r'C:\Users\18742\Desktop\test4.xlsx']
 
     excel_output_file = os.path.join(upper_2_dir, 'output', 'cal_info_comb_bilevel.xlsx')
 
@@ -2706,14 +2220,8 @@ if __name__ == '__main__':
             print('================BEGIN NEW FILE======================', file=file)
             print('execute: ' + file_name, file=file)
 
-        CCG_iterator_stoch = IterateComb(data=data, agg_cut=False,
-                                     solution_appro='primal',
-                                     primal_based_dual_to_ini=False,
-                                     use_lp_basis=False,
-                                     parallel_method='process',
-                                     agg_cut_part=False,
-                                     solve_MP_use_Benders=False,
-                                     revise_dual_value=True)
+        CCG_iterator_stoch = IterateComb(data=data, parallel_method='process',
+                                         revise_dual_value=True)
         set_hub = [23, 47, 60, 79, 87, 69]
         opened_z = [(h,l) for h in set_hub for l in set_hub if h!=l]
         # opened_z = {(23,47), (60,79)}  # 23, 47, 60, 79, 87, 69
@@ -2727,9 +2235,6 @@ if __name__ == '__main__':
 
         print('diff_sum={:.4f}'.format(diff_sum))
         exit()
-
-
-
 
 
         parser = get_parser()

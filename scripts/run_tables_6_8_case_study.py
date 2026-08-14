@@ -25,17 +25,10 @@ ALLOW_CORE = 16
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--CCG_timelimit", type=int, help="time limit of CCG algo", default=3600*12)
-    parser.add_argument("--MP_timelimit", type=int, help="time limit of MP", default=1800)  # spend less time on MP. The i-ccg algo will solve MP repeatedly when required.
-    parser.add_argument("--use_i_ccg", type=int, help="whether use i-CCG algo", default=True)
-    parser.add_argument("--MP_gap_scale", type=int, help="MIPGap = MIP * scale", default=0.15)
-    parser.add_argument("--inexact_gap_threshold", type=int, help="inexact_gap_threshold", default=0.05)
-    parser.add_argument("--stop_gap", type=int, help="stop gap CCG", default=1e-5)
-    parser.add_argument("--MP_ini_gap", type=int, help="initial gap of MP", default=0.1)
-
-    parser.add_argument("--Single_Level_timelimit", type=int, help="timelimit of sinvle level algo rithm", default=3600)
-
-
+    parser.add_argument("--time-limit", type=int, default=3600,
+                        help="C&CG time limit in seconds (default: 3600)")
+    parser.add_argument("--use-i-ccg", type=int, choices=(0, 1), default=1,
+                        help="Use inexact C&CG (default: 1)")
     return parser
 
 
@@ -113,7 +106,6 @@ def get_empty_result():
               'Delta type': [],
               'lp warm start': [],
               'solution approach': [],
-              'primal also dual': [],
               'time read data': [],
               'time model creation': [],
               'time preprocess': [],
@@ -153,6 +145,9 @@ def get_empty_result():
 
 
 if __name__ == '__main__':
+    args = get_parser().parse_args()
+    CCG_timelimit = args.time_limit
+    use_i_ccg = bool(args.use_i_ccg)
     result1 = get_empty_result()
     result2 = get_empty_result()
     current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -170,7 +165,7 @@ if __name__ == '__main__':
         with open(console_output_file, 'a') as file:
             print('================BEGIN NEW FILE======================', file=file)
             print('execute: ' + file_name, file=file)
-        # try:
+
         for arc_elimination in [True]:
             # for Delta_type in ['MST']:
             Delta_value = 5
@@ -185,12 +180,6 @@ if __name__ == '__main__':
 
                 """compare uncertainty through C&CG"""
                 solution_strategy = 'process'
-                parser = get_parser()
-                args = parser.parse_args()
-                CCG_timelimit = args.CCG_timelimit
-                use_i_ccg = args.use_i_ccg
-                solve_MP_use_Benders = False  # CCG MP is too large, use Benders to solve it (** only disaggregated cuts are possible!!)
-
                 with open(console_output_file, 'a') as file:
                     print('********************single level MILP model by Gurobi************************', file=file)
                 one_lay_mdl = OneLayerModel(data=modeldata, use_KKT=False, use_sos1=False, add_strong_dual=False)
@@ -211,13 +200,8 @@ if __name__ == '__main__':
                 time_read_determ_data = time.time() - tmp
                 modeldata_determ.obtain_average_value()  # obtain average value and convert to a deterministic instance
 
-                CCG_iterator_determ = IterateComb(data=modeldata_determ, agg_cut=False,
-                                             solution_appro='primal',
-                                             primal_based_dual_to_ini=False,
-                                             use_lp_basis=False,
+                CCG_iterator_determ = IterateComb(data=modeldata_determ,
                                              parallel_method='process',
-                                             agg_cut_part=False,
-                                             solve_MP_use_Benders=False,
                                              revise_dual_value=True,
                                                   n_tree_iter_max=250)
                 CCG_iterator_determ.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=True)
@@ -232,13 +216,8 @@ if __name__ == '__main__':
                 # stochastic fix z as determ
                 with open(console_output_file, 'a') as file:
                     print('********************stochastic fix z as determ************************', file=file)
-                CCG_iterator_stoch = IterateComb(data=modeldata, agg_cut=False,
-                                             solution_appro='primal',
-                                             primal_based_dual_to_ini=False,
-                                             use_lp_basis=False,
+                CCG_iterator_stoch = IterateComb(data=modeldata,
                                              parallel_method='process',
-                                             agg_cut_part=False,
-                                             solve_MP_use_Benders=False,
                                              revise_dual_value=True,
                                                  n_tree_iter_max=250)
 
@@ -256,13 +235,8 @@ if __name__ == '__main__':
                 # stochastic fix z as single-level
                 with open(console_output_file, 'a') as file:
                     print('********************stochastic fix z as single level************************', file=file)
-                CCG_iterator_stoch_z_single = IterateComb(data=modeldata, agg_cut=False,
-                                                 solution_appro='primal',
-                                                 primal_based_dual_to_ini=False,
-                                                 use_lp_basis=False,
+                CCG_iterator_stoch_z_single = IterateComb(data=modeldata,
                                                  parallel_method='process',
-                                                 agg_cut_part=False,
-                                                 solve_MP_use_Benders=False,
                                                  revise_dual_value=True,
                                                           n_tree_iter_max=250)
 
@@ -281,13 +255,8 @@ if __name__ == '__main__':
                 # stochastic
                 with open(console_output_file, 'a') as file:
                     print('********************solve stochastic model************************', file=file)
-                CCG_iterator_stoch = IterateComb(data=modeldata, agg_cut=False,
-                                             solution_appro='primal',
-                                             primal_based_dual_to_ini=False,
-                                             use_lp_basis=False,
+                CCG_iterator_stoch = IterateComb(data=modeldata,
                                              parallel_method='process',
-                                             agg_cut_part=False,
-                                             solve_MP_use_Benders=False,
                                              revise_dual_value=True,
                                                  n_tree_iter_max=250)
 
@@ -329,89 +298,7 @@ if __name__ == '__main__':
                         print('=====================CURRENT CALCULATION EXITED============================', file=file)
                     continue
 
-                """out of sample scenarios evaluation - use single level"""
-                # with open(console_output_file, 'a') as file:
-                #     print('********************out of sample scenarios evaluation single level************************', file=file)
-                # # out of sample evaluation: use determ
-                # with open(console_output_file, 'a') as file:
-                #     print('********************out of sample evaluation: use determ************************', file=file)
-                #
-                # out_sample_file_id = 0
-                # df_trip_info_list = []
-                # df_hub_info_list = []
-                # dict_obj_info = {}
-                # df_obj_detail_info_out_sample = pd.DataFrame()
-                # for out_sample_file in os.listdir(out_sample_folder):
-                #
-                #     out_sample_file_full = os.path.join(out_sample_folder, out_sample_file)
-                #
-                #     modeldata_out_sample = Modeldata(file_name=out_sample_file_full, arc_elimination=arc_elimination,
-                #                                      Delta_type=Delta_type, Delta_value=5)
-                #     CCG_iterator_out_sample_determ = IterateComb(data=modeldata_out_sample, agg_cut=False,
-                #                                  solution_appro='primal',
-                #                                  primal_based_dual_to_ini=False,
-                #                                  use_lp_basis=False,
-                #                                  parallel_method='process',
-                #                                  agg_cut_part=False,
-                #                                  solve_MP_use_Benders=False,
-                #                                  revise_dual_value=True)
-                #     CCG_iterator_out_sample_determ.MP.fix_z(given_z=dict_z_determ)
-                #     CCG_iterator_out_sample_determ.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                #     df_trip_info_out_sample_determ, df_hub_info_out_sample_determ, obj_info_out_sample_determ, obj_detail_info_out_sample_determ = CCG_iterator_out_sample_determ.collect_solution_info(
-                #         solution_type='out_sample_determ_{}'.format(out_sample_file[:-5]))
-                #     result2 = CCG_iterator_out_sample_determ.update_result_ccg(result=result2,
-                #                                                    read_data_time=read_data_time, tag='out_sample_determ_{}'.format(out_sample_file[:-5]))
-                #     write_result(file_name='calculation_info_out_sample.xlsx', result=result2)
-                #     # out of sample evaluation: use stoch
-                #     with open(console_output_file, 'a') as file:
-                #         print('********************out of sample evaluation: use determ************************', file=file)
-                #
-                #     CCG_iterator_out_sample_stoch = IterateComb(data=modeldata_out_sample, agg_cut=False,
-                #                                  solution_appro='primal',
-                #                                  primal_based_dual_to_ini=False,
-                #                                  use_lp_basis=False,
-                #                                  parallel_method='process',
-                #                                  agg_cut_part=False,
-                #                                  solve_MP_use_Benders=False,
-                #                                  revise_dual_value=True)
-                #     CCG_iterator_out_sample_stoch.MP.fix_z(given_z=dict_z_stoch)
-                #     CCG_iterator_out_sample_stoch.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                #     df_trip_info_out_sample_stoch, df_hub_info_out_sample_stoch, obj_info_out_sample_stoch, obj_detail_info_out_sample_stoch = CCG_iterator_out_sample_stoch.collect_solution_info(
-                #         solution_type='out_sample_stoch_{}'.format(out_sample_file[:-5]))
-                #     write_solution(CCG_iterator=CCG_iterator_out_sample_stoch, file_tag='out_sample_stoch_{}'.format(out_sample_file[:-5]))
-                #     result2 = CCG_iterator_out_sample_stoch.update_result_ccg(result=result2,
-                #                                                    read_data_time=read_data_time, tag='out_sample_stoch_{}'.format(out_sample_file[:-5]))
-                #     write_result(file_name='calculation_info_out_sample.xlsx', result=result2)
-                #
-                #     # df_trip_info_list.append(df_trip_info_out_sample_determ.copy())
-                #     # df_trip_info_list.append(df_trip_info_out_sample_stoch.copy())
-                #     # df_hub_info_list.append(df_hub_info_out_sample_determ)
-                #     # df_hub_info_list.append(df_hub_info_out_sample_stoch)
-                #     dict_obj_info['out_sample_determ_{}'.format(out_sample_file[:-5])] = obj_info_out_sample_determ.copy()
-                #     dict_obj_info['out_sample_stoch_{}'.format(out_sample_file[:-5])] = obj_info_out_sample_stoch.copy()
-                #
-                #     out_sample_file_id += 1
-                #
-                #     # write result
-                #     with open(console_output_file, 'a') as file:
-                #         print('*****************write out of sample results*********************', file=file)
-                #     upper_2_dir = os.path.dirname(current_directory)
-                #     file_path = os.path.join(upper_2_dir, 'output', os.path.basename(file_name)[:-5]+'out_sample.xlsx')
-                #     # df_trip_info = pd.concat(df_trip_info_list)
-                #     # df_hub_info = pd.concat(df_hub_info_list)
-                #     df_obj_info = pd.DataFrame.from_dict(dict_obj_info, orient='index')
-                #     df_obj_detail_info_out_sample = pd.concat([df_obj_detail_info_out_sample, obj_detail_info_out_sample_determ, obj_detail_info_out_sample_stoch])
-                #     with pd.ExcelWriter(file_path) as writer:
-                #         # df_trip_info.to_excel(excel_writer=writer, sheet_name='trip_info', index=False)
-                #         # df_hub_info.to_excel(excel_writer=writer, sheet_name='hub_info', index=False)
-                #         df_obj_info.to_excel(excel_writer=writer, sheet_name='obj_info_out_sample', index=True)
-                #         df_obj_detail_info_out_sample.to_excel(excel_writer=writer, sheet_name='obj_detail_info_out_sample', index=False)
 
-        # except Exception as e:
-        #     with open(console_output_file, 'a') as file:
-        #         content = file_name + ' :calculate terminated'
-        #         print(content, file=file)
-        #         print(e, file=file)
 
 
 

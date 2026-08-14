@@ -107,7 +107,7 @@ for theta_in_file in [0.0001, 0.002, 0.005]:
         # 'dist_cost': [],
     }
 
-    for sol_type in ['stochastic']: ## ['determi', 'stochastic_fix_z', 'stochastic_z_single', 'stochastic', 'single_level_leader']:
+    for sol_type in ['stochastic', 'determi', 'stochastic_fix_z', 'stochastic_z_single', 'single_level_leader']:
         df_trip_info = df_trip_info_raw[df_trip_info_raw['solution type'] == sol_type]
         for income in ['Low', 'Middle', 'High', 'all']:
             for trans_mode in ['shuttle', 'shuttle+bus', 'all']:
@@ -136,8 +136,7 @@ for theta_in_file in [0.0001, 0.002, 0.005]:
                 obj_detail_info['model_distance'].append((df['amounts']*df['follower travel distance']*df['scenario_prob']).sum() / (df['scenario_prob'] * df['amounts']).sum())
                 obj_detail_info['model_travel_time'].append((df['amounts']*df['follower travel time']*df['scenario_prob']).sum() / (df['scenario_prob'] * df['amounts']).sum() / 60)
                 obj_detail_info['bus_transfer'].append((df['amounts']*df['bus_transfer']*df['scenario_prob']).sum() / (df['scenario_prob'] * df['amounts']).sum())
-                # obj_detail_info['time_cost'].append((df['amounts']*df['time_cost']*df['scenario_prob']).sum() / (df['scenario_prob'] * df['amounts']).sum())
-                # obj_detail_info['dist_cost'].append((df['amounts']*df['dist_cost']*df['scenario_prob']).sum() / (df['scenario_prob'] * df['amounts']).sum())
+
 
     df_obj_info = pd.DataFrame.from_dict(obj_detail_info)
 

@@ -5,7 +5,7 @@
    Time : 2024/12/25 16:06
 Function: 1) Search acceptable bus lets for all trips.
           2) This .py file is mainly for the response search algorithm
-          3) the parameters parallel and n_core in the function find_hub_leg_all need to be specified before using
+          3) the parameters parallel and n_core in the function find_hub_leg_all are to be specified depending on the usage
 """
 import time
 
@@ -19,7 +19,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import pandas as pd
-from sklearn.cluster import KMeans
 from matplotlib import pyplot as plt
 import pickle
 import networkx as nx
@@ -193,16 +192,6 @@ def find_hub_leg_indep_fun(idx_list, file_name, n_iter_max):
                 'obj_leader': leader_cost
             }
             return result
-
-            # opened_bus_leg = [(h, l) for (h, l) in self.data.Hub_pairs if x[h, l].X > 0.9]
-            #
-            #
-            # opened_bus_leg.sort()
-            # result = {
-            #     'used_leg': opened_bus_leg,
-            #     'obj_follower': obj_follower.getValue(),
-            #     'obj_leader': obj_leader.getValue()
-            # }
 
 
 
@@ -452,17 +441,7 @@ class PotentialHubFinder():
 
 
         else:
-            # pool = mp.Pool()
-            # result = pool.starmap(self.find_hub_leg, [(s, r) for s, r in self.data.Sce_Trip])
-            # pool.close()
-            # pool.join()
-            #
-            # prefered_hubs = {self.data.Sce_Trip[i]: result[i][0] for i in range(len(self.data.Sce_Trip))}
-            # prefered_leader_obj = {self.data.Sce_Trip[i]: result[i][1] for i in range(len(self.data.Sce_Trip))}
-            # original_leader_obj = {self.data.Sce_Trip[i]: result[i][2] for i in range(len(self.data.Sce_Trip))}  # leader obj when no restriction on bus legs
-            # not_completely_explored = {self.data.Sce_Trip[i]: result[i][3] for i in range(len(self.data.Sce_Trip))}  # return true if the subproblem is not completely explored
-            # prefered_follower_obj = {self.data.Sce_Trip[i]: result[i][4] for i in range(len(self.data.Sce_Trip))}
-            # search_time_rec = {self.data.Sce_Trip[i]: result[i][5] for i in range(len(self.data.Sce_Trip))}
+
             prefered_hubs = {}
             prefered_leader_obj = {}
             original_leader_obj = {}
@@ -470,27 +449,7 @@ class PotentialHubFinder():
             prefered_follower_obj = {}
             search_time_rec = {}
             search_iter_rec = {}
-            # # get the calculation time of each trip in scenario 1
-            # s = self.data.Scenarios[0]
-            # for r in self.data.Trips:
-            #     # print('find_hub_leg for ({}, {})'.format(s, r))
-            #     bus_leg_sol, leader_obj, original_leader_obj_tmp, not_completely_explored_tmp, prefered_follower_obj_tmp, search_time = find_hub_leg_indep_fun(s, r, file_name=self.data.file_name, n_iter_max=self.n_iter_max)
-            #     prefered_hubs[s,r] = bus_leg_sol.copy()
-            #     prefered_leader_obj[s,r] = leader_obj.copy()
-            #     original_leader_obj[s,r] = original_leader_obj_tmp
-            #     not_completely_explored[s,r] = not_completely_explored_tmp
-            #     prefered_follower_obj[s,r] = prefered_follower_obj_tmp
-            #     search_time_rec[s,r] = search_time
-            # # classify the trips into n_core groups according to the calculation time
-            # cal_time = np.array(list(search_time_rec.values())).reshape(-1, 1)  # values to be clustered
-            # kmeans = KMeans(n_clusters=n_core, random_state=0, n_init=10)
-            # kmeans.fit(cal_time)
-            # # Cluster labels
-            # labels = kmeans.labels_
-            # centers = kmeans.cluster_centers_
-            #
-            # parallel_trips = [[self.data.Trips[i] for i in list(np.where(labels == class_id)[0])] for class_id in
-            #                   range(n_core)]
+
 
             # allocate the tasks to cores
             idx_cores = [[] for _ in range(n_core)]  # problem idxes assigned to each core

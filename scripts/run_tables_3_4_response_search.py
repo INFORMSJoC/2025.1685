@@ -1,5 +1,6 @@
 """Run the response-search (RS) reformulation reported in Tables 3 and 4."""
 
+import argparse
 import os
 import sys
 import time
@@ -13,8 +14,25 @@ from model_purely_combinatorial import IterateComb
 from run_tables_6_8_case_study import get_empty_result, write_result
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--table", type=int, choices=(3, 4), default=3,
+                        help="Paper table to reproduce (default: 3)")
+    parser.add_argument("--time-limit", type=int, default=None,
+                        help="MILP time limit in seconds (default: 600 for Table 3; 3600 for Table 4)")
+    args = parser.parse_args()
+    if args.time_limit is None:
+        args.time_limit = {3: 600, 4: 3600}[args.table]
+    return args
+
+
 def main():
-    data_dir = Path(os.environ.get("ODMTS_DATA_DIR", ROOT / "data" / "table_3_small_instances"))
+    args = parse_args()
+    default_data_dir = {
+        3: ROOT / "data" / "table_3_small_instances",
+        4: ROOT / "data" / "table_4_medium_instances",
+    }[args.table]
+    data_dir = Path(os.environ.get("ODMTS_DATA_DIR", default_data_dir))
     parallel_method = os.environ.get("ODMTS_PARALLEL_METHOD", "process")
     results = get_empty_result()
 
@@ -25,17 +43,11 @@ def main():
         read_time = time.time() - start
         solver = IterateComb(
             data=data,
-            agg_cut=False,
-            solution_appro="primal",
-            primal_based_dual_to_ini=False,
-            use_lp_basis=False,
             parallel_method=parallel_method,
-            agg_cut_part=False,
-            solve_MP_use_Benders=False,
             revise_dual_value=True,
-            n_tree_iter_max=10_000,
+            n_tree_iter_max=10000,
         )
-        solve_info = solver.solve_uncompleted_MILP()
+        solve_info = solver.solve_uncompleted_MILP(time_limit=args.time_limit)
         solver.update_cal_infor(n_Benders_iter=0)
         solver.record.update(solve_info)
         results = solver.update_result_ccg(results, read_data_time=read_time, tag="RS")
