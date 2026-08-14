@@ -221,8 +221,6 @@ class SubShortestPathWithStrongDualModel():
         :param ini_sol: initial solution
         :param use_lp_basis: whether use lp basis for warm start
         """
-        # log_name = self.data.file_name[:-5]
-        # env_name = log_name + '_sub_{}_{}'.format(s, r)
         with gp.Env() as env, gp.Model('SubModel', env=env) as model:
             # add variables
             pi1 = model.addVars(self.data.Node_of_trip[r], vtype=GRB.CONTINUOUS, name='pi_1', lb=-GRB.INFINITY)
@@ -317,11 +315,7 @@ class SubShortestPathWithStrongDualModel():
             # revise dual values
             model.addConstr(obj == obj.getValue())
             max_var = model.addVar()  # maximum of all variables
-            # model.addConstrs(max_var >= pi1[i] for i in self.data.Node_of_trip[r])
-            # model.addConstrs(max_var >= - pi1[i] for i in self.data.Node_of_trip[r])
             model.addConstrs(max_var >= pi2[h,l] for (h,l) in self.data.Hub_pairs)
-            # model.addConstrs(max_var >= pi3[h,l] for (h,l) in self.data.Hub_pairs)
-            # model.addConstrs(max_var >= pi4[i,j] for (i,j) in self.data.Node_pairs_for_mdl_sp[r])
             model.addConstr(max_var >= t)
 
             model.setObjective(max_var, sense=GRB.MINIMIZE)
@@ -329,11 +323,8 @@ class SubShortestPathWithStrongDualModel():
 
 
             if need_x:
-                # x = {(h, l): - model.getConstrByName(f'c_tau[{h},{l}]').pi for (h, l) in self.data.Hub_pairs}
                 x = {(h, l): - c_tau.pi for (h, l) in self.data.Hub_pairs}
                 x = {key: (0 if value < 0.1 else value) for key,value in x.items()}
-                # y = {(i, j): - model.getConstrByName(f'c_gamma[{i},{j}]').pi for (i, j) in
-                #      self.data.Node_pairs_for_mdl_sp[r]}
                 y = {(i, j): - c_gamma.pi for (i, j) in self.data.Node_pairs_for_mdl_sp[r]}
                 y = {key: (0 if value < 0.1 else value) for key, value in y.items()}
             else:
@@ -431,7 +422,6 @@ class SubShortestPathWithStrongDualModel():
                 - nu1[h, l] + z_param[h, l] * t >= 0 for (h, l) in self.data.Hub_pairs),
                 name='nu_z_t')
 
-            # model.setParam('TimeLimit', 360)  # 10 minutes
             model.setParam('LogToConsole', 0)
             sol_time = time.time()
             model.optimize()
@@ -634,10 +624,6 @@ class VarValue:
 
     def update_Master_var(self, var):
         self.z = {key: round(var.z[key].X) for key in var.z}
-        # print('*************the value of z:*************')
-        # for key in var.z:
-        #     if self.z[key]:
-        #         print(self.z[key])
         if var.gamma_exist:
             self.gamma = {key: var.gamma[key].X for key in var.gamma}
         else:
@@ -687,8 +673,6 @@ class VarValue:
         self.delta.update(
             {key_o: {key_i: var.delta[key_o][key_i].X for key_i in var.delta[key_o]} for key_o in var.delta})
 
-        # self.n_iters = var.n_iters
-        # print('update master variables')
 
 
     def update_Sub_var(self, s, r, pi1, pi2, pi3, pi4, t, obj):
@@ -706,7 +690,6 @@ class VarValue:
 
         self.t.update({(s, r,): t})
         self.latest_sub_obj.update({(s,r,): obj})
-        # print('update sub variables')
 
     def update_best_z(self):
         self.best_z = self.z.copy()
@@ -737,19 +720,11 @@ class VarValue:
 
         self.t.update({(s, r,): t})
 
-        # if x is not None:
-        #     self.x = {k:v for k,v in self.x.items() if not (k[0]==s and k[1]==r)}
-        #     self.y = {k:v for k,v in self.y.items() if not (k[0]==s and k[1]==r)}
-
         if y is not None:
             self.x.update({(s, r,) + key: x[key] for key in x})
             self.y.update({(s, r,) + key: y[key] for key in y})
 
         self.latest_sub_obj.update({(s, r,): obj})
-
-        # if VBasis is not None or CBasis is not None:
-        #     self.VBasis.update({(r,): VBasis})
-        #     self.CBasis.update({(r,): CBasis})
 
     def record_pi_value(self):
         self.pi1_all.update({self.n_iters: self.pi1.copy()})
@@ -861,11 +836,9 @@ class OneStageModelFullMultiplierDepends():
                 vtype=GRB.CONTINUOUS, name='aux_obj')
 
     def fix_z(self, given_z: dict):
-        """
-        TODO: this is not correct, as we only recorded opened z! This function doesn't fix all z!
-        fix z
-        :param given_z: a dictionary, but the keys are str
-        :return:
+        """Fix recorded open arcs to one and all unrecorded arcs to zero.
+
+        ``given_z`` uses string representations of the arc tuples as keys.
         """
         for key in self.var.z:
             if str(key) in given_z.keys():
@@ -1119,9 +1092,7 @@ class OneStageModelFullMultiplierDepends():
                 self.data.tao_follower[h, l, s] * self.var.x[s, r, h, l] for (h, l) in
                 self.data.Hub_pairs) + gp.quicksum(
                 self.data.gamma_follower[i, j, s] * self.var.y[s, r, i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r])
-            # print('>>>>>>check strong duality correctness\nobj_primal is: {}, obj_dual is: {}'.format(self.obj_primal[s,r].getValue(), self.obj_dual[s,r].getValue()))
         if self.add_strong_dual:
-            # if use strong duality (self.use_KKT=False) or use SOS1+strong duality (self.add_strong_dual=True)
             self.model.addConstrs((self.obj_dual[s, r] >= self.obj_primal[s, r] for (s, r) in self.data.Sce_Trip),
                                  name='strong_duality')
 
@@ -1144,9 +1115,7 @@ class OneStageModelFullMultiplierDepends():
                 self.data.tao_follower[h, l, s] * self.var.x[s, r, h, l] for (h, l) in
                 self.data.Hub_pairs) + gp.quicksum(
                 self.data.gamma_follower[i, j, s] * self.var.y[s, r, i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r])
-            # print('>>>>>>check strong duality correctness\nobj_primal is: {}, obj_dual is: {}'.format(self.obj_primal[s,r].getValue(), self.obj_dual[s,r].getValue()))
         if self.add_why_no_need_M:
-            # if use strong duality (self.use_KKT=False) or use SOS1+strong duality (self.add_strong_dual=True)
             self.model.addConstrs((self.obj_dual[s, r] >= self.obj_primal[s, r] for (s, r) in self.data.Sce_Trip),
                                  name='why_no_need_M')
 
@@ -1814,7 +1783,6 @@ if __name__ == '__main__':
     file_list.sort()
     console_output_file = os.path.join(upper_2_dir, 'output', 'console_info.txt')
     numerical_result_file = os.path.join(upper_2_dir, 'output', 'cal_result.xlsx')
-    # file_list = ['../data/20250425/node81-hub6-tripN200-scenario20-time2025-04-25-17-41-30.xlsx']
     out_sample_file = os.path.join(upper_2_dir, 'data', 'sample', 'sample-keep6hubs.xlsx')
     with open(console_output_file, 'a') as file:
         print('files to be executed: \n', file=file)
@@ -1836,35 +1804,6 @@ if __name__ == '__main__':
                     modeldata = Modeldata(file_name=file_name, arc_elimination=arc_elimination, Delta_type=Delta_type, Delta_value=5)
                     read_data_time = time.time() - tmp  # time for data reading
 
-                    """ccg algorithm"""
-                    # CCG_timelimit = 7200
-                    # list_agg_cut = [False]
-                    # agg_cut_part = False  # effect only when agg_cut is True
-                    # solve_MP_use_Benders = False  # CCG MP is too large, use Benders to solve it (** only disaggregated cuts are possible!!)
-                    # if solve_MP_use_Benders and [True] in list_agg_cut:
-                    #     raise 'when use Benders for CCG MP, only disaggregated cuts are possible'
-                    # for agg_cut in list_agg_cut:
-                    #     for parallel_method in ['process']:
-                    #         for use_lp_basis in [False]:
-                    #                     for average_case in [False]:
-                    #                         try:
-                    #                             CCG_iterator = Iterate(data=modeldata, agg_cut=agg_cut,
-                    #                                                    use_lp_basis=use_lp_basis,
-                    #                                                    parallel_method=parallel_method,
-                    #                                                    agg_cut_part=agg_cut_part,
-                    #                                                    solve_MP_use_Benders=solve_MP_use_Benders)
-                    #                             CCG_iterator.start_Benders_iteration(timelimit=CCG_timelimit)
-                    #                             # CCG_iterator.MP.model.optimize()
-                    #                             # CCG_iterator.MP.model.write('{}.sol'.format(modeldata.file_name[:-5]))
-                    #
-                    #                             write_solution(CCG_iterator=CCG_iterator, file_tag='None')
-                    #
-                    #                             result = CCG_iterator.update_result_ccg(result=result, read_data_time=read_data_time)
-                    #                             write_result()
-                    #                             del CCG_iterator
-                    #                         except Exception as e:
-                    #                             print(file_name, e, ':calculate terminated')
-
                     """original KKT/strong duality reformulation"""
                     try:
                         # use KKT, use bigM
@@ -1872,7 +1811,6 @@ if __name__ == '__main__':
                         reform_KKT_bigM.solve_model()
                         result_kkt = reform_KKT_bigM.update_result_record(result = result_kkt, read_data_time=read_data_time)
                         write_result_KKT(result_kkt, numerical_result_file)
-                        # y = {key: reform_KKT_bigM.var.y[key].X for key in reform_KKT_bigM.var.y}
                         del reform_KKT_bigM
 
 
@@ -1883,21 +1821,6 @@ if __name__ == '__main__':
                         write_result_KKT(result_kkt, numerical_result_file)
                         del reform_KKT_sos1
 
-                        # # use KKT, use bigM, also use strong duality condition
-                        # reform_KKT_bigM = OneStageModelFullMultiplierDepends(data=modeldata, use_KKT=True, use_sos1=False, use_bigM=True, add_strong_dual=True)
-                        # reform_KKT_bigM.solve_model()
-                        # result_kkt = reform_KKT_bigM.update_result_record(result=result_kkt, read_data_time=read_data_time)
-                        # write_result_KKT(result_kkt, numerical_result_file)
-                        # del reform_KKT_bigM
-                        #
-                        # # use KKT, use sos1, also use strong duality condition
-                        # reform_KKT_sos1_strong_dual = OneStageModelFullMultiplierDepends(data=modeldata, use_KKT=True,
-                        #                                                                  use_sos1=True, use_bigM=False, add_strong_dual=True)
-                        # reform_KKT_sos1_strong_dual.solve_model()
-                        # result_kkt = reform_KKT_sos1_strong_dual.update_result_record(result=result_kkt, read_data_time=read_data_time)
-                        # write_result_KKT(result_kkt, numerical_result_file)
-                        # del reform_KKT_sos1_strong_dual
-
                         # use strong duality
                         reform_KKT_strongDual = OneStageModelFullMultiplierDepends(data=modeldata, use_KKT=True, use_sos1=False, use_bigM=False, add_strong_dual=True)
                         reform_KKT_strongDual.solve_model()
@@ -1905,267 +1828,12 @@ if __name__ == '__main__':
                         write_result_KKT(result_kkt, numerical_result_file)
                         del reform_KKT_strongDual
 
-                    # # single level, right only when fr=dr, i.e., leader and follower share the same \tau and \gamma
-                    # one_layer_model = OneLayerModel(data=modeldata, use_KKT=False, use_sos1=False)
-                    # one_layer_model.solve_model()
-                    # result_one_layer = one_layer_model.update_result_record(result=result_kkt, read_data_time=read_data_time)
-                    # write_result_KKT()
-                    # del one_layer_model
-
                     except Exception as e:
                         with open(console_output_file, 'a') as file:
                             content = file_name + ' :calculate terminated'
                             print(content, file=file)
                             print(e, file=file)
 
-                    """compare uncertainty through C&CG"""
-                    # solution_strategy = 'process'
-                    # parser = get_parser()
-                    # args = parser.parse_args()
-                    # CCG_timelimit = args.CCG_timelimit
-                    # use_i_ccg = args.use_i_ccg
-                    # solve_MP_use_Benders = False  # CCG MP is too large, use Benders to solve it (** only disaggregated cuts are possible!!)
-                    #
-                    # # deterministic
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************solve deterministic model************************', file=file)
-                    # # result = {key:[] for key in result}
-                    # tmp = time.time()
-                    # modeldata_determ = Modeldata(file_name=file_name, arc_elimination=arc_elimination, Delta_type=Delta_type,
-                    #                       Delta_value=5)
-                    # time_read_determ_data = time.time() - tmp
-                    # modeldata_determ.obtain_average_value()  # obtain average value and convert to a deterministic instance
-                    # CCG_iterator_determ = Iterate(data=modeldata_determ, agg_cut=False,
-                    #                        use_lp_basis=False,
-                    #                        parallel_method=solution_strategy,
-                    #                        agg_cut_part=False,
-                    #                        solve_MP_use_Benders=solve_MP_use_Benders)
-                    # CCG_iterator_determ.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                    # df_trip_info_determ, df_hub_info_determ, obj_info_determ = CCG_iterator_determ.collect_solution_info(
-                    #     solution_type='deterministic')
-                    # dict_z_determ, _, _ = write_solution(CCG_iterator=CCG_iterator_determ, file_tag='determ')
-                    # result = CCG_iterator_determ.update_result_ccg(result=result,
-                    #                                               read_data_time=time_read_determ_data, tag='determ')
-                    # write_result(file_name='calculation_info.xlsx')
-                    # del CCG_iterator_determ
-                    # del modeldata_determ
-                    # gc.collect()
-                    #
-                    # # stochastic fix z as determ
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************stochastic fix z as determ************************', file=file)
-                    # CCG_iterator_stoch = Iterate(data=modeldata, agg_cut=False,
-                    #                              use_lp_basis=False,
-                    #                              parallel_method=solution_strategy,
-                    #                              agg_cut_part=False,
-                    #                              solve_MP_use_Benders=solve_MP_use_Benders)  # declare a new model
-                    #
-                    # # result = {key: [] for key in result}
-                    # CCG_iterator_stoch.MP.fix_z(given_z=dict_z_determ)
-                    # CCG_iterator_stoch.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                    # df_trip_info_stoch_fix_z, df_hub_info_stoch_fix_z, obj_info_stoch_fix_z = CCG_iterator_stoch.collect_solution_info(
-                    #     solution_type='stochastic_fix_z')
-                    # stoch_fix_obj_val = min(CCG_iterator_stoch.UB_record)
-                    # write_solution(CCG_iterator=CCG_iterator_stoch, file_tag='stoch_fix')
-                    # result = CCG_iterator_stoch.update_result_ccg(result=result,
-                    #                                                read_data_time=read_data_time, tag='stoch_fix_z_as_determ')
-                    # write_result(file_name='calculation_info.xlsx')
-                    # del CCG_iterator_stoch
-                    # gc.collect()
-                    #
-                    #
-                    # # single level, consider only leader
-                    # # first copy the dicts
-                    # gamma_leader = modeldata.gamma_leader.copy()
-                    # gamma_follower = modeldata.gamma_follower.copy()
-                    # tao_leader = modeldata.tao_leader.copy()
-                    # tao_follower = modeldata.tao_follower.copy()
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************single level, consider only leader************************', file=file)
-                    # modeldata.gamma_follower = gamma_leader.copy()
-                    # modeldata.tao_follower = tao_leader.copy()
-                    # CCG_iterator_stoch = Iterate(data=modeldata, agg_cut=False,
-                    #                              use_lp_basis=False,
-                    #                              parallel_method=solution_strategy,
-                    #                              agg_cut_part=False,
-                    #                              solve_MP_use_Benders=solve_MP_use_Benders)
-                    # CCG_iterator_stoch.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                    # df_trip_info_single_leader, df_hub_info_single_leader, obj_info_stoch_single_leader = CCG_iterator_stoch.collect_solution_info(
-                    #     solution_type='single_level_leader', model_type='single_leader', real_tao=tao_follower, real_gamma=gamma_follower)
-                    # single_leader_obj_val = CCG_iterator_stoch.LB_record[-1]
-                    # write_solution(CCG_iterator=CCG_iterator_stoch, file_tag='single_leader')
-                    # result = CCG_iterator_stoch.update_result_ccg(result=result,
-                    #                                               read_data_time=read_data_time, tag='sigle_level_leader')
-                    # write_result(file_name='calculation_info.xlsx')
-                    # del CCG_iterator_stoch
-                    # gc.collect()
-                    # # recover the parameters
-                    # modeldata.gamma_follower = gamma_follower.copy()
-                    # modeldata.tao_follower = tao_follower.copy()
-                    #
-                    # # stochastic
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************solve stochastic model************************', file=file)
-                    # CCG_iterator_stoch = Iterate(data=modeldata, agg_cut=False,
-                    #                        use_lp_basis=False,
-                    #                        parallel_method=solution_strategy,
-                    #                        agg_cut_part=False,
-                    #                        solve_MP_use_Benders=solve_MP_use_Benders)
-                    # CCG_iterator_stoch.MP.restrict_bound_obj(lb=single_leader_obj_val, ub=stoch_fix_obj_val)
-                    # CCG_iterator_stoch.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                    # df_trip_info_stoch, df_hub_info_stoch, obj_info_stoch = CCG_iterator_stoch.collect_solution_info(
-                    #     solution_type='stochastic')
-                    # dict_z_stoch, _, _ = write_solution(CCG_iterator=CCG_iterator_stoch, file_tag='stoch')
-                    # result = CCG_iterator_stoch.update_result_ccg(result=result,
-                    #                                         read_data_time=read_data_time, tag='stochastic')
-                    # write_result(file_name='calculation_info.xlsx')
-                    #
-                    # del CCG_iterator_stoch
-                    # gc.collect()
-                    #
-                    # # write result
-                    # with open(console_output_file, 'a') as file:
-                    #     print('*****************write model results*********************', file=file)
-                    # df_trip_info = pd.concat(
-                    #     [df_trip_info_determ, df_trip_info_stoch_fix_z, df_trip_info_stoch, df_trip_info_single_leader])
-                    # df_hub_info = pd.concat(
-                    #     [df_hub_info_determ, df_hub_info_stoch_fix_z, df_hub_info_stoch, df_hub_info_single_leader])
-                    # dict_obj_info = {'determ': obj_info_determ, 'stochastic_fix_z': obj_info_stoch_fix_z,
-                    #                  'stochastic': obj_info_stoch, 'single_leader': obj_info_stoch_single_leader}
-                    # df_obj_info = pd.DataFrame.from_dict(dict_obj_info, orient='index')
-                    #
-                    # upper_2_dir = os.path.dirname(current_directory)
-                    # file_path = os.path.join(upper_2_dir, 'output',
-                    #                          os.path.basename(file_name)[:-5] + 'opt_solution_info.xlsx')
-                    # with pd.ExcelWriter(file_path) as writer:
-                    #     df_trip_info.to_excel(excel_writer=writer, sheet_name='trip_info', index=False)
-                    #     df_hub_info.to_excel(excel_writer=writer, sheet_name='hub_info', index=False)
-                    #     df_obj_info.to_excel(excel_writer=writer, sheet_name='obj_info_in_sample', index=True)
-                    #
-                    #
-                    #
-                    # if dict_z_stoch == dict_z_determ:
-                    #     with open(console_output_file, 'a') as file:
-                    #         print("Solution in stochastic and determ models are the same. Proceed to the next file.",
-                    #               file=file)
-                    #         print('=====================CURRENT CALCULATION EXITED============================', file=file)
-                    #     continue
-
-
-                    # out of sample scenarios evaluation
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************out of sample scenarios evaluation************************', file=file)
-                    # modeldata_out_sample = Modeldata(file_name=out_sample_file, arc_elimination=arc_elimination,
-                    #                                  Delta_type=Delta_type, Delta_value=5)
-                    # list_df_obj_out_sample = []
-                    # for sce in modeldata_out_sample.Scenarios:
-                    #     modeldata_out_sample.Scenarios = [sce]
-                    #     modeldata_out_sample.Scenarios_prob = {sce: 1}
-                    #     modeldata_out_sample.Sce_Trip = {(s, r) for s in modeldata_out_sample.Scenarios for r in
-                    #                                      modeldata_out_sample.Trips}
-                    #     CCG_iterator_tmp = Iterate(data=modeldata_out_sample, agg_cut=False,
-                    #                        use_lp_basis=False,
-                    #                        parallel_method=solution_strategy,
-                    #                        agg_cut_part=False,
-                    #                        solve_MP_use_Benders=solve_MP_use_Benders)
-                    #     # evaluate deterministic solution
-                    #     CCG_iterator_tmp.MP.fix_z(dict_z_determ)
-                    #     CCG_iterator_tmp.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                    #     df = CCG_iterator_tmp.collect_out_sample_solution_info(solution_type='determ')
-                    #     obj_value_determ = df['Total = Facility cost + Transport cost (leader)'][0]
-                    #     list_df_obj_out_sample.append(df.copy())
-                    #     # evaluate stochastic solution
-                    #     CCG_iterator_tmp.MP.fix_z(dict_z_stoch)
-                    #     CCG_iterator_tmp.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
-                    #     df = CCG_iterator_tmp.collect_out_sample_solution_info(solution_type='stochastic')
-                    #     if df['Total = Facility cost + Transport cost (leader)'][0] < obj_value_determ:
-                    #         df['Stochastic is better'] = 'True'
-                    #     elif df['Total = Facility cost + Transport cost (leader)'][0] == obj_value_determ:
-                    #         df['Stochastic is better'] = 'Same'
-                    #     else:
-                    #         df['Stochastic is better'] = 'False'
-                    #
-                    #     list_df_obj_out_sample.append(df.copy())
-                    #
-                    # del CCG_iterator_tmp
-                    # del modeldata_out_sample
-                    # gc.collect()
-
-
-
-                    # out of sample scenarios evaluation - use single level
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************out of sample scenarios evaluation single level************************', file=file)
-                    # modeldata_out_sample = Modeldata(file_name=out_sample_file, arc_elimination=arc_elimination,
-                    #                                  Delta_type=Delta_type, Delta_value=5)
-                    # list_df_obj_out_sample_sglv = []
-                    # for sce in modeldata_out_sample.Scenarios:
-                    #     modeldata_out_sample.Scenarios = [sce]
-                    #     modeldata_out_sample.Scenarios_prob = {sce: 1}
-                    #     modeldata_out_sample.Sce_Trip = {(s, r) for s in modeldata_out_sample.Scenarios for r in
-                    #                                      modeldata_out_sample.Trips}
-                    #     reform_KKT_strongDual = OneStageModelFullMultiplierDepends(data=modeldata_out_sample, use_KKT=True,
-                    #                                                                use_sos1=False, use_bigM=False,
-                    #                                                                add_strong_dual=True)
-                    #     # evaluate deterministic solution
-                    #     reform_KKT_strongDual.fix_z(dict_z_determ)
-                    #     reform_KKT_strongDual.solve_model()
-                    #     df = reform_KKT_strongDual.collect_out_sample_solution_info(solution_type='determ')
-                    #     obj_value_determ = df['Total = Facility cost + Transport cost (leader)'][0]
-                    #     list_df_obj_out_sample_sglv.append(df.copy())
-                    #
-                    #     # evaluate stochastic solution
-                    #     reform_KKT_strongDual.fix_z(dict_z_stoch)
-                    #     reform_KKT_strongDual.solve_model()
-                    #     df = reform_KKT_strongDual.collect_out_sample_solution_info(solution_type='stochastic')
-                    #
-                    #     if df['Total = Facility cost + Transport cost (leader)'][0] < obj_value_determ:
-                    #         df['Stochastic is better'] = 'True'
-                    #     elif df['Total = Facility cost + Transport cost (leader)'][0] == obj_value_determ:
-                    #         df['Stochastic is better'] = 'Same'
-                    #     else:
-                    #         df['Stochastic is better'] = 'False'
-                    #
-                    #     list_df_obj_out_sample_sglv.append(df.copy())
-                    #
-                    # del reform_KKT_strongDual
-                    # del modeldata_out_sample
-                    # gc.collect()
-
-                    # # single level, only follower
-                    # with open(console_output_file, 'a') as file:
-                    #     print('********************single level, consider only follower************************', file=file)
-                    # # result = {key: [] for key in result}
-                    # modeldata.gamma_leader = gamma_follower.copy()
-                    # modeldata.tao_leader = tao_follower.copy()
-                    # modeldata.gamma_follower = gamma_follower.copy()
-                    # modeldata.tao_follower = tao_follower.copy()
-                    # CCG_iterator_stoch = Iterate(data=modeldata, agg_cut=False,
-                    #                              use_lp_basis=False,
-                    #                              parallel_method=solution_strategy,
-                    #                              agg_cut_part=False,
-                    #                              solve_MP_use_Benders=solve_MP_use_Benders)
-                    # CCG_iterator_stoch.start_Benders_iteration(timelimit=CCG_timelimit)
-                    # df_trip_info_single_follower, df_hub_info_single_follower, obj_info_stoch_single_follower = CCG_iterator_stoch.collect_solution_info(
-                    #     solution_type='single_level_follower', model_type='single_follower', real_tao=tao_leader, real_gamma=gamma_leader)
-                    # write_solution(CCG_iterator=CCG_iterator_stoch, file_tag='single_follower')
-                    # result = CCG_iterator_stoch.update_result_ccg(result=result,
-                    #                                               read_data_time=read_data_time, tag='single_level_follower')
-                    # write_result(file_name='calculation_info.xlsx')
-                    # del CCG_iterator_stoch
-                    # gc.collect()
-
-                    # # write result
-                    # with open(console_output_file, 'a') as file:
-                    #     print('*****************write out of sample results*********************', file=file)
-                    # # df_obj_out_sample = pd.concat(list_df_obj_out_sample)
-                    # df_obj_out_sample_snglv = pd.concat(list_df_obj_out_sample_sglv)
-                    #
-                    # upper_2_dir = os.path.dirname(current_directory)
-                    # file_path = os.path.join(upper_2_dir, 'output', os.path.basename(file_name)[:-5]+'out_sample.xlsx')
-                    # with pd.ExcelWriter(file_path) as writer:
-                    #     # df_obj_out_sample.to_excel(excel_writer=writer, sheet_name='obj_info_out_sample', index=False)
-                    #     df_obj_out_sample_snglv.to_excel(excel_writer=writer, sheet_name='obj_info_out_sample_snglv', index=False)
         except Exception as e:
             with open(console_output_file, 'a') as file:
                 print(file_name, e, ':calculate terminated at the end line.', file=file)

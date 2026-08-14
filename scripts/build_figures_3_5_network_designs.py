@@ -34,7 +34,6 @@ def plot_map():
     long_max = -83.565814
     lat_min = 42.181508
     lat_max = 42.316971
-    # The coordinate format is: [top left latitude, top left longitude, bottom right latitude, bottom right longitude]
     bounds = [lat_max + 0.02, long_min, lat_min, long_max]
     bounds_plot = [bounds[1], bounds[2], bounds[3], bounds[0]]
     zoom_num = 13
@@ -56,14 +55,13 @@ def plot_income_map():
 
 
 def plot_bus_routine():
-    plt.rcParams['font.sans-serif'] = ['times new roman']  # font name
-    plt.rcParams['font.size'] = 10  # font size
+    plt.rcParams['font.sans-serif'] = ['times new roman']
+    plt.rcParams['font.size'] = 10
 
     """plot opend leg"""
     for key in z_sol:
         if z_sol[key] > 0.1:
-            # width = bus_use_time.get(key, 0)/max(bus_use_time.values()) + 0.1
-            width = 1  # TODO: change here
+            width = 1
             plt.plot([dict_node_lon[key[0]], dict_node_lon[key[1]]],
                      [dict_node_lat[key[0]], dict_node_lat[key[1]]], linewidth=width, color='black',
                      alpha=0.5, linestyle='-')
@@ -77,22 +75,15 @@ def plot_bus_routine():
             plt.annotate(
                 '', xy=(dict_node_lon[key[1]], dict_node_lat[key[1]]), xytext=(x_arrow_mid, y_arrow_mid),
                 arrowprops=dict(arrowstyle='->', color='black', linewidth=1,
-                                mutation_scale=12,  # Bigger arrowhead 7 in v1 submission. v2: 11 in large fig, 13 in small fig
+                                mutation_scale=12,
                                 alpha=1
                                 )
             )
 
-    """plot closed bus stops"""
-    # for h in list_hub:
-    #     if h not in opened_hub:
-    #         plt.scatter(dict_node_lon[h], dict_node_lat[h], linewidth=0.5, color='gray',
-    #                     marker='o', s=8, alpha=0.95)
-
-    # plot opened bus stops
     for i in range(len(opened_hub)):
         h = opened_hub[i]
         plt.scatter(dict_node_lon[h], dict_node_lat[h], linewidth=0.5, color=hub_set_color[i],
-                    marker='^', s=45, alpha=0.95)  # s=10 in v1 submission. V2: 25 in large fig, 30 in small fig.
+                    marker='^', s=45, alpha=0.95)
 
 
 
@@ -112,11 +103,6 @@ def plot_trips(scenario=0, income='All'):
     for key in y_sol:
         if key[0]==scenario and key[1] in trip_by_bus:
             if key[2] in opened_hub or key[3] in opened_hub:
-                # connect the node to the hub
-                # plt.plot([dict_node_lon[key[2]], dict_node_lon[key[3]]],
-                #          [dict_node_lat[key[2]], dict_node_lat[key[3]]], linewidth=0.2, color='salmon',
-                #          alpha=0.55, linestyle='-.')
-                # plot the point that connects hub
                 if key[2] not in opened_hub:
                     stop_p = key[2]
                     target_hub = key[3]
@@ -125,14 +111,6 @@ def plot_trips(scenario=0, income='All'):
                     target_hub = key[2]
                 plt.scatter(dict_node_lon[stop_p], dict_node_lat[stop_p], color=hub_set_color[opened_hub.index(target_hub)],
                             marker='o', s=3.5, linewidths=0.1, alpha=0.95)
-
-    # # plot all stops
-    # for n in list_node:
-    #     if n not in list_hub:
-    #         plt.scatter(dict_node_lon[n], dict_node_lat[n], color='salmon',
-    #                     marker='o', s=2, linewidths=0.1, alpha=0.95)
-
-
 def plot_shuttle_trips(income='All'):
     """
     plot the trips use shuttle only
@@ -142,11 +120,7 @@ def plot_shuttle_trips(income='All'):
     if income != 'All':
         trip_by_bus = [r for r in trip_by_bus if dict_node_income[dict_trip_de[r]]==income]  # keep only the asked income level
     trip_by_bus.sort()
-    # if len(trip_by_bus) > 30:
-    #     trip_by_bus = trip_by_bus[:30]
-
-
-    colors = plt.get_cmap('tab10').colors  # + plt.get_cmap('tab20b').colors + plt.get_cmap('tab20c').colors
+    colors = plt.get_cmap('tab10').colors
     colors = list(colors) * (700 // len(colors) + 1)  # ensure that there are sufficient colors
 
 
@@ -162,10 +136,6 @@ def plot_shuttle_trips(income='All'):
     for i in range(len(x1_cor)):
         plt.scatter(x1_cor[i], y1_cor[i], color=colors[i], marker='o', s=2.5, linewidths=0.1, alpha=0.95)
         plt.scatter(x3_cor[i], y3_cor[i], color=colors[i], marker='o', s=2.5, linewidths=0.1, alpha=0.95)
-        # plt.plot([x1_cor[i], x3_cor[i]], [y1_cor[i], y3_cor[i]], linewidth=0.2, color=colors[i],
-        #          alpha=0.95, linestyle='-.')
-        # plt.plot([x2_cor[i], x3_cor[i]], [y2_cor[i], y3_cor[i]], linewidth=0.2, color=colors[i],
-        #          alpha=0.95, linestyle='-.')
 
 
 def plot_one_y_routine(trip_id=None, scenario=0):
@@ -191,9 +161,6 @@ def save_fig(figure_name):
                 'style': 'italic',
                 'color': 'black'
                 }
-    # title_font = font_manager.FontProperties(family="Times New Roman", size=15)
-    # plt.title('Routine', fontproperties=title_font)
-
     plt.xlabel('Longitude', fontdict=fontdict)
     plt.ylabel('Latitude', fontdict=fontdict)
     plt.axis('off')
@@ -243,7 +210,7 @@ if __name__ == '__main__':
     dict_node_y = {i: convert_cor(dict_node_lat[i], dict_node_lon[i])[1] for i in list_node}
 
     for data_file in os.listdir(data_folder):
-        for theta in [None]:  # [0.0002, 0.0005, 0.001, 0.002, 0.005]:  # TODO, normally, use None only
+        for theta in [None]:
             if theta is None:
                 data_file_use = data_file
             else:
@@ -261,10 +228,9 @@ if __name__ == '__main__':
                 file_x_sol = os.path.join(result_folder, data_file_use)[:-5]+'_tag_{}_Delta_5_x_sol.json'.format(sol_type)
                 file_y_sol = os.path.join(result_folder, data_file_use)[:-5]+'_tag_{}_Delta_5_y_sol.json'.format(sol_type)
                 file_z_sol = os.path.join(result_folder, data_file_use)[:-5]+'_tag_{}_Delta_5_z_sol.json'.format(sol_type)
-                for use_map in [True]:  # use map or use income map
-                    for income_req in ['All']:  # , 'High', 'Low', 'Middle']:
-                        os.makedirs(os.path.join(result_folder, 'images'), exist_ok=True)  # output path of images
-                        # figure_folder = os.path.join(result_folder, 'images')
+                for use_map in [True]:
+                    for income_req in ['All']:
+                        os.makedirs(os.path.join(result_folder, 'images'), exist_ok=True)
                         figure_folder = ROOT / 'output' / 'network_designs'
                         os.makedirs(figure_folder, exist_ok=True)
                         with open(file_x_sol) as f:
@@ -299,8 +265,6 @@ if __name__ == '__main__':
                         else:
                             list_sce = list(set([key[0] for key in y_sol.keys()]))[0]
                         list_sce.sort()
-                        # list_sce = [1]  # Dra results of only the first scenario
-
                         if use_map:
                             for s in list_sce:
                                 figure_name = 'theta_{}-{}.jpg'.format(theta_value, sol_type)
@@ -309,8 +273,6 @@ if __name__ == '__main__':
                                 plot_map()
                                 plot_bus_routine()
                                 plot_trips(scenario=s, income=income_req)
-                                # plot_shuttle_trips(income=income_req)
-                                # plot_one_y_routine(scenario=s)
                                 save_fig(figure_name=figure_name)
                         else:
                             dict_node_lon = dict_node_x
@@ -323,8 +285,6 @@ if __name__ == '__main__':
                                 print('plot... ',s)
                                 plot_income_map()
                                 plot_bus_routine()
-                                # plot_trips(scenario=s, income=income_req)
-                                # plot_one_y_routine(scenario=s)
                                 save_fig(figure_name=figure_name)
 
 

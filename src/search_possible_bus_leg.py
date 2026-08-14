@@ -296,10 +296,8 @@ def find_hub_leg_indep_fun(idx_list, file_name, n_iter_max):
         not_completely_explored = False
         n_iters = 0
         while node_to_explore.qsize() > 0:
-            # print('\t\t{} nodes remained to be explored'.format(node_to_explore.qsize()))
             node = node_to_explore.get()
-            # result = node.solve_model(data=data)
-            result = node.solve_model_dijkstra(data=data)  #TODO: Use dijkstra
+            result = node.solve_model_dijkstra(data=data)
 
             if len(result['used_leg']) > 0:
                 if result['used_leg'] not in bus_leg_sol:
@@ -307,7 +305,6 @@ def find_hub_leg_indep_fun(idx_list, file_name, n_iter_max):
                     leader_obj[sol_id] = result['obj_leader']  # record associated bus leg
                     follower_obj[sol_id] = result['obj_follower']  # record associated bus leg
                     sol_id += 1
-                # print('\t\tobtained sol', result['used_leg'])
                 for (h,l) in result['used_leg']:
                     node_new = RoutineFinderInner(s, r)
                     node_new.forbiden_leg = node.forbiden_leg.copy()
@@ -322,8 +319,7 @@ def find_hub_leg_indep_fun(idx_list, file_name, n_iter_max):
 
         node_new = RoutineFinderInner(s, r)
         node_new.forbiden_leg = data.Hub_pairs
-        # result = node_new.solve_model(data=data)
-        result = node_new.solve_model_dijkstra(data=data)  #TODO: Use dijkstra
+        result = node_new.solve_model_dijkstra(data=data)
         original_leader_obj = result['obj_leader']  # the leader obj when all hubs are closed
 
         sorted_follower_obj = dict(sorted(follower_obj.items(), key=lambda item: item[1], reverse=False))  # sort by obj value, asscending
@@ -375,9 +371,7 @@ class PotentialHubFinder():
         not_completely_explored = False
         n_iters = 0
         while node_to_explore.qsize() > 0:
-            # print('\t\t{} nodes remained to be explored'.format(node_to_explore.qsize()))
             node = node_to_explore.get()
-            # print('\t\tforbiden sol: ', node.forbiden_leg)
             result = node.solve_model()
             if len(result['used_leg']) > 0:
                 if result['used_leg'] not in bus_leg_sol:
@@ -385,7 +379,6 @@ class PotentialHubFinder():
                     leader_obj[sol_id] = result['obj_leader']  # record associated bus leg
                     follower_obj[sol_id] = result['obj_follower']  # record associated bus leg
                     sol_id += 1
-                # print('\t\tobtained sol', result['used_leg'])
                 for (h,l) in result['used_leg']:
                     node_new = RoutineFinder(self.data, s, r)
                     node_new.forbiden_leg = node.forbiden_leg.copy()
@@ -410,8 +403,12 @@ class PotentialHubFinder():
     def find_hub_leg_all(self, parallel=False, n_core=8):
         """
         find potential hub legs for all trips under all scenarios
-        @:param parallel: whether or not use parallel
-        @:param n_core: number of preprocessing worker processes (default: 8)
+        @:param parallel: False runs response search sequentially with ``self.data``;
+                         True distributes response-search tasks among worker processes
+        @:param n_core: number of response-search worker processes (default: 8).
+                        Parallel workers load compact scenario/trip data from the
+                        temporary .pkl files written by ``Modeldata.output_to_disk``.
+                        This is separate from ``IterateComb.parallel_method``.
         :return:
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -428,8 +425,6 @@ class PotentialHubFinder():
             search_time_rec = {}
             search_iter_rec = {}
             for s,r in self.data.Sce_Trip:
-                # print('find_hub_leg for ({}, {})'.format(s, r))
-                # bus_leg_sol, leader_obj, original_leader_obj_tmp, not_completely_explored_tmp, prefered_follower_obj_tmp, search_time = self.find_hub_leg(s, r)
                 bus_leg_sol, leader_obj, original_leader_obj_tmp, not_completely_explored_tmp, prefered_follower_obj_tmp, search_time, search_iter = find_hub_leg_indep_fun([(s, r)], file_name=self.data.file_name, n_iter_max=self.n_iter_max)
                 prefered_hubs[s,r] = bus_leg_sol[s,r].copy()
                 prefered_leader_obj[s,r] = leader_obj[s,r].copy()
@@ -451,8 +446,7 @@ class PotentialHubFinder():
             search_iter_rec = {}
 
 
-            # allocate the tasks to cores
-            idx_cores = [[] for _ in range(n_core)]  # problem idxes assigned to each core
+            idx_cores = [[] for _ in range(n_core)]
             g_idx = 0
             for r in self.data.Trips:
                 for s in self.data.Scenarios:
@@ -466,8 +460,6 @@ class PotentialHubFinder():
             pool.close()
             pool.join()
             t_parallel = time.time() - t_parallel
-            # update results
-
             for i in range(n_core):
                 prefered_hubs.update(result[i][0])
                 prefered_leader_obj.update(result[i][1])
@@ -480,58 +472,48 @@ class PotentialHubFinder():
         f_name = os.path.join(output_path, data_file + '_prefered_hubs.json')
         prefered_hubs_tmp = {str(key): value for key,value in prefered_hubs.items()}
         with open(f_name, "w") as f:
-            json.dump(prefered_hubs_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(prefered_hubs_tmp, f, indent=4)
 
         f_name = os.path.join(output_path, data_file + '_prefered_leader_obj.json')
         prefered_leader_obj_tmp = {str(key): value for key,value in prefered_leader_obj.items()}
         with open(f_name, "w") as f:
-            json.dump(prefered_leader_obj_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(prefered_leader_obj_tmp, f, indent=4)
 
         f_name = os.path.join(output_path, data_file + '_prefered_follower_obj.json')
         prefered_follower_obj_tmp = {str(key): value for key,value in prefered_follower_obj.items()}
         with open(f_name, "w") as f:
-            json.dump(prefered_follower_obj_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(prefered_follower_obj_tmp, f, indent=4)
 
         f_name = os.path.join(output_path, data_file + '_prefered_original_leader_obj.json')
         original_leader_obj_tmp = {str(key): value for key,value in original_leader_obj.items()}
         with open(f_name, "w") as f:
-            json.dump(original_leader_obj_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(original_leader_obj_tmp, f, indent=4)
 
         f_name = os.path.join(output_path, data_file + '_not_complete_explored.json')
         not_completely_explored_tmp = {str(key): value for key,value in not_completely_explored.items() if value}
         with open(f_name, "w") as f:
-            json.dump(not_completely_explored_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(not_completely_explored_tmp, f, indent=4)
 
         f_name = os.path.join(output_path, data_file + '_search_time.json')
         search_time_tmp = {str(key): value for key,value in search_time_rec.items() if value}
         with open(f_name, "w") as f:
-            json.dump(search_time_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(search_time_tmp, f, indent=4)
 
         f_name = os.path.join(output_path, data_file + '_search_iter.json')
         search_iter_tmp = {str(key): value for key,value in search_iter_rec.items() if value}
         with open(f_name, "w") as f:
-            json.dump(search_iter_tmp, f, indent=4)  # indent=4 表示美化输出
+            json.dump(search_iter_tmp, f, indent=4)
 
         return prefered_hubs, prefered_leader_obj, original_leader_obj, not_completely_explored, search_time_rec, search_iter_rec
 
 
 if __name__ == '__main__':
-    # file_list = ['../data/cluster/node725-hub10-tripNfull-scenario3-passenger2586-time2024-11-14-12-01-35.xlsx']
     file_list = ['../data/cluster/test_delete_16-2.xlsx']
     file_name = file_list[0]
     data = Modeldata(file_name=file_name, arc_elimination=True, Delta_type='MST', Delta_value=5)
     hub_finder = PotentialHubFinder(data=data)
     prefered_hubs, prefered_leader_obj, original_leader_obj, not_completely_explored, search_time_rec = hub_finder.find_hub_leg_all(parallel=False)
     opened_legs = [tp for i in prefered_leader_obj for item in prefered_hubs[i] for tp in item]
-
-    # for i in prefered_leader_obj:
-    #     # print(i)
-    #     # print(prefered_hubs[i])
-    #     for item in prefered_hubs[i]:
-    #         print(item)
-    #         for k in item:
-    #             print(k)
-
 
     opened_legs = list(set(opened_legs))
     opened_legs.sort()

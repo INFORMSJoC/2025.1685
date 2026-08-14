@@ -33,7 +33,6 @@ def get_parser():
 
 
 def write_result(file_name=None, result=None):
-    # write result
     current_directory = os.path.dirname(os.path.abspath(__file__))
     upper_2_dir = os.path.dirname(current_directory)
     tmp = os.path.join(upper_2_dir, 'output')
@@ -158,7 +157,7 @@ if __name__ == '__main__':
     file_list = [os.path.join(file_path, f) for f in file_list_original]
     file_list.sort()
 
-    out_sample_folder = os.path.join(upper_2_dir, 'data', 'sample')  # todo
+    out_sample_folder = os.path.join(upper_2_dir, 'data', 'sample')
 
     for file_name in file_list:
         console_output_file = os.path.join(upper_2_dir, 'output', 'console_info_{}.txt'.format(os.path.basename(file_name)[:-5]))
@@ -167,10 +166,9 @@ if __name__ == '__main__':
             print('execute: ' + file_name, file=file)
 
         for arc_elimination in [True]:
-            # for Delta_type in ['MST']:
             Delta_value = 5
             Delta_type = 'MST'
-            for theta_given in [None]:  #, 0.0002, 0.0005, 0.001, 0.002, 0.005]:  # TODO: change here! Fix the value to 0.0001 or None. 20250715
+            for theta_given in [None]:
 
                 with open(console_output_file, 'a') as file:
                     print('(arc elimination={}, Delta type={}) reading data .....'.format(arc_elimination, Delta_type), file=file)
@@ -221,7 +219,6 @@ if __name__ == '__main__':
                                              revise_dual_value=True,
                                                  n_tree_iter_max=250)
 
-                # result = {key: [] for key in result}
                 CCG_iterator_stoch.MP.fix_z(given_z=dict_z_determ)
                 CCG_iterator_stoch.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
                 df_trip_info_stoch_fix_z, df_hub_info_stoch_fix_z, obj_info_stoch_fix_z ,obj_detail_info_stoch_fix_z = CCG_iterator_stoch.collect_solution_info(
@@ -240,7 +237,6 @@ if __name__ == '__main__':
                                                  revise_dual_value=True,
                                                           n_tree_iter_max=250)
 
-                # result = {key: [] for key in result}
                 CCG_iterator_stoch_z_single.MP.fix_z(given_z=dict_z_single_leader)
                 CCG_iterator_stoch_z_single.start_Benders_iteration(timelimit=CCG_timelimit, use_i_ccg=use_i_ccg)
                 df_trip_info_stoch_z_single, df_hub_info_stoch_z_single, obj_info_stoch_z_single, obj_detail_info_stoch_z_single = CCG_iterator_stoch_z_single.collect_solution_info(

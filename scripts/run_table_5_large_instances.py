@@ -35,7 +35,7 @@ if __name__ == '__main__':
     file_list = [os.path.join(file_path, f) for f in file_list_original]
     file_list.sort()
 
-    out_sample_folder = os.path.join(upper_2_dir, 'data', 'sample')  # todo
+    out_sample_folder = os.path.join(upper_2_dir, 'data', 'sample')
 
     for file_name in file_list:
         console_output_file = os.path.join(upper_2_dir, 'output', 'console_info_{}.txt'.format(os.path.basename(file_name)[:-5]))
@@ -69,7 +69,6 @@ if __name__ == '__main__':
                     write_result(file_name='calculation_info.xlsx', result=result1)
                     del cuts_solver
 
-                    # stochastic - tree search (20 iters) with CCG
                     with open(console_output_file, 'a') as file:
                         print('********************tree search with 10000 iterations************************', file=file)
                     CCG_iterator_stoch = IterateComb(data=modeldata,
@@ -80,7 +79,7 @@ if __name__ == '__main__':
 
                     sol_info = CCG_iterator_stoch.solve_uncompleted_MILP(
                         time_limit=CCG_timelimit
-                    )  # solve the incomplete MILP and obtain UB and LB for the original problem
+                    )
                     CCG_iterator_stoch.update_cal_infor(n_Benders_iter=0)
                     CCG_iterator_stoch.record.update(sol_info)
 
@@ -92,7 +91,6 @@ if __name__ == '__main__':
                         continue
                     del CCG_iterator_stoch
 
-                    # stochastic - tree search (1000 iters) with CCG, no enhancement strategies
                     with open(console_output_file, 'a') as file:
                         print('********************tree search with 100 iterations************************', file=file)
                     CCG_iterator_stoch = IterateComb(data=modeldata,
@@ -107,7 +105,6 @@ if __name__ == '__main__':
                     write_result(file_name='calculation_info.xlsx', result=result1)
                     del CCG_iterator_stoch
 
-                    # stochastic - tree search (100 iters) with CCG
                     with open(console_output_file, 'a') as file:
                         print('********************tree search with 100 iterations************************', file=file)
                     CCG_iterator_stoch = IterateComb(data=modeldata,

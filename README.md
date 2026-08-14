@@ -17,6 +17,34 @@ algorithms described in the paper. The archive follows the INFORMS Journal on
 Computing submission layout and contains the files used for Tables and
 Figures for numerical results.
 
+
+## Cite
+
+To cite the contents of this repository, please cite both the paper and this
+software archive using their respective DOIs:
+
+https://doi.org/10.1287/ijoc.2025.1685
+
+https://doi.org/10.1287/ijoc.2025.1685.cd
+
+BibTeX for citing this software archive:
+
+```bibtex
+@misc{LiuEtAl2025Code,
+  author =        {Suri Liu and Yiling Zhang and Beste Basciftci and Wenyuan Wang},
+  publisher =     {INFORMS Journal on Computing},
+  title =         {{Stochastic Bilevel Network Design}},
+  year =          {2025},
+  doi =           {10.1287/ijoc.2025.1685.cd},
+  url =           {https://github.com/INFORMSJoC/2025.1685},
+  note =          {Available for download at https://github.com/INFORMSJoC/2025.1685},
+}
+```
+
+## License
+
+The software is distributed under the MIT License. See `LICENSE`.
+
 ## Requirements
 
 - Linux (the reported experiments used Ubuntu 20.04 LTS)
@@ -29,7 +57,9 @@ The code can also run on Windows system with a valid Gurobi license.
 ## Repository layout
 
 - `src/`: optimization models, data reader, response search, and evaluation code.
-- `scripts/`: experiment and postprocessing scripts named by paper output. The scripts starting with "run_" execute algorithms. Then run the scripts starting with "build_" to build tables using original outputs.
+- `scripts/`: experiment and postprocessing scripts named by paper output. 
+	The scripts starting with "run_" execute algorithms. Then run the scripts starting 
+	with "build_" to build tables using original outputs.
 - `data/`: the exact instances used for Tables 3-5 and the case study.
 - `results/`: reported workbooks, figures, and the raw files needed by plotting/postprocessing scripts.
 - `output/`: destination for newly generated solver output.
@@ -123,33 +153,75 @@ python scripts/run_table_9_callback_comparison.py
 ## Results
 
 The final computational tables are in `results/tables`, and the computational
-figures are in `results/figures`. Raw case-study solutions are limited to the five model
-configurations and three leader preference values used in Tables 6-8 and
-Figures 3 and 5.
+figures are in `results/figures`. Raw solutions used in Tables 6-8 andFigures 4 
+can be found in `results/raw`.
 
-## Cite
 
-To cite the contents of this repository, please cite both the paper and this
-software archive using their respective DOIs:
+Table 3 in the paper reports the preprocessing time of the response search algorithm 
+under parallel implementations with different numbers of cores, along with the MILP
+ solution times and the number of nodes explored under the studied single-level reformulations.
 
-https://doi.org/10.1287/ijoc.2025.1685
+![Table 3](results/tables/table_3_small_instances.xlsx)
 
-https://doi.org/10.1287/ijoc.2025.1685.cd
+Table 4 in the paper reports the number of iterations needed by the response 
+search algorithm (both the maximum and average iterations over all follower-scenario
+pairs) under the Column “RS Iters”.
 
-BibTeX for citing this software archive:
+![Table 4](results/tables/table_4_medium_instances_raw.xlsx)
 
-```bibtex
-@misc{LiuEtAl2025Code,
-  author =        {Suri Liu and Yiling Zhang and Beste Basciftci and Wenyuan Wang},
-  publisher =     {INFORMS Journal on Computing},
-  title =         {{Stochastic Bilevel Network Design}},
-  year =          {2025},
-  doi =           {10.1287/ijoc.2025.1685.cd},
-  url =           {https://github.com/INFORMSJoC/2025.1685},
-  note =          {Available for download at https://github.com/INFORMSJoC/2025.1685},
-}
-```
 
-## License
+Table 5 in the paper compares the decomposition algorithm proposed in Section 5 
+against the RS reformulation on several instances.
 
-The software is distributed under the MIT License. See `LICENSE`.
+![Table 5](results/tables/table_5_large_instances_raw.xlsx)
+![Table 5 instances](data/table_5_large_instances), 6 *.xlsx files
+
+Table 6 provides the resulting comparisons where the investment cost indicates the
+total weighted cost of operating bus legs, whereas the travel disutilities correspond
+to the disutilities realized by the transit agency and the riders as obtained 
+from their corresponding leader and follower problems. 
+
+Table 7 provides the durations of the suggested paths to the riders by the 
+transit agency under the stochastic bilevel model for riders with different income levels.
+
+Table 8 compares the impact of θ_l value on the decisions of the leader and follower problems.
+
+![Table 6-8](results/tables/Table_6-8_practical.xlsx)
+
+Table 9 presents a computational comparison of the cutting-plane algorithm 
+implemented using Gurobi’s branch-and-cut framework via callback functions, 
+both without and with RS constraints, denoted as Call back and Callback+RS, respectively.
+
+![Table 9](results/tables/Table_9_callback.xlsx)
+
+
+
+Figure 3 in the paper presents the resulting network designs, where each 
+open hub is represented with a unique color, while the origins of the trips using 
+the corresponding hub as part of their initial transfer stop are marked with the same color.
+
+![Figure 3](results/figure_3), 3 *.jpg files
+
+Figure 4 in the paper shows the distributions of the iterations explored in 
+the response search algorithm for the instances reported in Table 4. 
+
+![Figure 4](results/figure_4), 6 *.png files
+
+Figure 5 in the paper shows the network designs under different θ_l values.
+
+![Figure 5](results/figure_5), 2 *.jpg files
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

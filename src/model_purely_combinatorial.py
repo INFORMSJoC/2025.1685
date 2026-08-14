@@ -303,7 +303,6 @@ class MasterModel():
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)
         data_file = os.path.basename(data.file_name)[:-5]
-        # log_file_prefix = upper_2_dir + '/output/' + data_file
         log_file_prefix = os.path.join(upper_2_dir, 'output')
         log_file_prefix = os.path.join(log_file_prefix, data_file)
 
@@ -423,27 +422,6 @@ class MasterModel():
                                                         self.data.Hub), name='flow_balance')
         with open(self.console_output_file, 'a') as file:
             print('\t\tadd primal special constraints...', file=file)
-            # self.cons.theta_cons_1 = self.model.addConstrs((-self.var.theta1[s, r, h] + self.var.theta1[s, r, l] -
-            #                                                 self.var.theta2[s, r, h, l] - self.var.theta3[s, r, h, l] <=
-            #                                                 self.data.tao_follower[h, l, s] for s in self.data.Scenarios
-            #                                                 for r in self.data.Trips for (h, l) in
-            #                                                 self.data.Hub_pairs), name='theta_cons_1')
-            # self.cons.theta_cons_2 = self.model.addConstrs((-self.var.theta1[s, r, i] + self.var.theta1[s, r, j] -
-            #                                                 self.var.theta4[s, r, i, j] <= self.data.gamma_follower[
-            #                                                     i, j, s] for s in self.data.Scenarios for r in
-            #                                                 self.data.Trips for (i, j) in self.data.Node_pairs_for_mdl_sp[r]),
-            #                                                name='theta_cons_2')
-            #
-            # self.cons.delta_lin_1 = self.model.addConstrs(
-            #     (self.var.delta[s, r, h, l] <= self.var.z[h, l] * self.data.bigM for s in self.data.Scenarios for r in
-            #      self.data.Trips for (h, l) in self.data.Hub_pairs), name='delta_lin_1')
-            # self.cons.delta_lin_2 = self.model.addConstrs(
-            #     (self.var.delta[s, r, h, l] <= self.var.theta2[s, r, h, l] for s in self.data.Scenarios for r in
-            #      self.data.Trips for (h, l) in self.data.Hub_pairs), name='delta_lin_2')
-            # self.cons.delta_lin_3 = self.model.addConstrs(
-            #     (self.var.delta[s, r, h, l] >= self.var.theta2[s, r, h, l] - self.data.bigM * (1 - self.var.z[h, l]) for
-            #      s in self.data.Scenarios for r in self.data.Trips for (h, l) in self.data.Hub_pairs),
-            #     name='delta_lin_3')
 
     def add_constr_explored_sp(self):
         """
@@ -826,12 +804,18 @@ class IterateComb:
                  n_tree_iter_max=100, preprocessing_cores=1):
         """
         :param data:
-        :param parallel_method: 'normal': persistent subproblem models;
-                                'process': multiprocessing;
-                                'sequential': rebuild and solve one subproblem at a time
+        :param parallel_method: execution mode for the C&CG follower subproblems
+                                (this does not control response-search preprocessing):
+                                'normal' creates and retains one Gurobi model for every
+                                scenario-trip pair;
+                                'process' rebuilds subproblem models as needed and solves
+                                them with an ALLOW_CORE-worker multiprocessing pool;
+                                'sequential' rebuilds and solves one subproblem at a time
+                                in the current process, avoiding many models in memory.
+                                For efficiency, in serial computing, use 'sequential' rather than setting ALLOW_CORE=1 and use "process".
         :param preprocessing_cores: number of response-search worker processes
                                     passed to PotentialHubFinder as n_core;
-                                    use 1 for serial preprocessing (default: 1)
+                                    use 1 for serial preprocessing (default: 1).
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)
@@ -839,7 +823,9 @@ class IterateComb:
         with open(self.console_output_file, 'a') as file:
             print('initiate data...', file=file)
         self.data = data
-        self.data.output_to_disk()  # output the information to the disk
+        # Temporary .pkl files are used only by response-search preprocessing workers.
+        # They are independent of the C&CG subproblem mode in parallel_method.
+        self.data.output_to_disk()
         self.n_tree_iter_max = n_tree_iter_max
         if isinstance(preprocessing_cores, bool) or not isinstance(preprocessing_cores, int) or preprocessing_cores < 1:
             raise ValueError('preprocessing_cores must be a positive integer')
@@ -917,40 +903,20 @@ class IterateComb:
         self.prefered_hubs, self.prefered_leader_obj, self.original_leader_obj, self.unexplred_probles, self.search_time_rec, self.search_iter_rec = hub_finder.find_hub_leg_all(
             parallel=self.preprocessing_cores > 1,
             n_core=self.preprocessing_cores,
-        )  # find all potential hubs
+        )
         self.unexplred_probles = {key: value for key,value in self.unexplred_probles.items() if value}
         self.data.Sce_Trip_unexplored = list(set(self.unexplred_probles.keys()))
         self.data.Sce_Trip_unexplored.sort()
         self.data.Sce_Trip_explored = list(set(self.data.Sce_Trip) - set(self.data.Sce_Trip_unexplored))
         self.data.Sce_Trip_explored.sort()
 
-        # #TODO: test, output the trips that used buses. Delete later 20250422
-        #
-        # trip_id = [r for (s,r) in self.prefered_hubs if len(self.prefered_hubs[s,r]) > 0]
-        # trip_o = [self.data.Trip_origin[r] for r in trip_id]
-        # trip_d = [self.data.Trip_destination[r] for r in trip_id]
-        # amount = [self.data.Trip_p_amount[1,r] for r in trip_id]
-        # hub_routes = [len(self.prefered_hubs[1,r]) for r in trip_id]
-        # not_fully_explored = [self.unexplred_probles.get(r,False) for r in trip_id]
-        # trip_info = {
-        #     'trip_id': trip_id,
-        #     'trip_o': trip_o,
-        #     'trip_d': trip_d,
-        #     'amount': amount,
-        #     'hub_routes': hub_routes,
-        #     'not_fully_explored':not_fully_explored,
-        # }
-        # df = pd.DataFrame.from_dict(trip_info)
-        #
-        # current_directory = os.path.dirname(os.path.abspath(__file__))
-        # upper_2_dir = os.path.dirname(current_directory)
-        # excel_file = os.path.join(upper_2_dir, 'output', 'find_bus_users_{}.xlsx'.format(os.path.basename(self.data.file_name)[:-5]))
-        # df.to_excel(excel_file, index=False)
-
-
-
-
     def create_submodels(self):
+        """Prepare follower subproblems according to ``parallel_method``.
+
+        ``normal`` retains a separate declared model for each scenario-trip pair.
+        ``process`` and ``sequential`` retain only one template and rebuild models
+        on demand, thereby avoiding creation of all follower models in advance.
+        """
         if self.parallel_method == 'normal':
             for s in self.data.Scenarios:
                 for r in self.data.Trips:
@@ -962,7 +928,12 @@ class IterateComb:
                 data=self.data, s=self.data.Scenarios[0], r=self.data.Trips[0])
 
     def solve_subproblems_primal(self, n_iters, need_x=False, revise_dual_value=False):
-        """Solve primal subproblems using the selected execution mode."""
+        """Solve C&CG follower subproblems using the selected execution mode.
+
+        ``process`` distributes on-demand solves to an ``ALLOW_CORE``-worker pool;
+        ``sequential`` performs the same on-demand solves one at a time without a
+        multiprocessing pool; and ``normal`` updates the persistent models.
+        """
         if self.parallel_method == 'normal':
             time_update_SP = 0
             time_record_solve_SP = 0
@@ -1109,38 +1080,6 @@ class IterateComb:
 
 
 
-    # def aux_solve_parallel(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None, VBasis_info:dict=None):
-    #     """auxilary function, will be invoked in parallel computing"""
-    #     tmp = time.time()
-    #     self.dict_SP[s, r].update_objective_cons(param_z=self.varValue.z)
-    #     self.time_update_SP[-1] += time.time() - tmp
-    #
-    #     result = self.dict_SP[s, r].solve_model(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis, VBasis_info=VBasis_info)
-    #     self.time_record_solve_SP[-1] += result['t_optimize']
-    #     self.time_update_SP[-1] += result['t_update']
-    #
-    #     return {(s,r): result}
-
-    # def aux_solve_parallel_primal(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None):
-    #     """auxilary function, will be invoked in parallel computing"""
-    #     tmp = time.time()
-    #     self.dict_SP_primal[s, r].update_objective_cons(param_z=self.varValue.z)
-    #     self.time_update_SP[-1] += time.time() - tmp
-    #
-    #     self.dict_SP_primal[s, r].write_lp_basis_info()
-    #
-    #
-    #     self.dict_SP_primal[s, r].model.optimize()
-    #     self.dict_SP_primal[s, r].change_obj()  # change obj to leader params
-    #     self.dict_SP_primal[s, r].model.optimize()
-    #     result_primal = self.dict_SP_primal[s, r].obtain_solution_info()
-    #
-    #     result = self.dict_SP_primal[s, r].solve_model(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis)
-    #     self.time_record_solve_SP[-1] += result['t_optimize']
-    #     self.time_update_SP[-1] += result['t_update']
-    #
-    #     return {(s,r): result}
-
     def aux_solve_parallel_primal_update(self, s, r, use_lp_basis=False, VBasis=None, CBasis=None):
         self.dict_SP_primal[s, r].update_objective_cons(param_z=self.varValue.z)
         self.dict_SP_primal[s, r].write_lp_basis_info(use_lp_basis=use_lp_basis, VBasis=VBasis, CBasis=CBasis)
@@ -1270,7 +1209,6 @@ class IterateComb:
         n_explor_repeat = 0  # numer of continuously executed explorations
         n_exploit_repeat = 0  # numer of continuously executed exploitations
         start_time = time.time()
-        # MP_solved_to_optimal = False
         while not ((best_ub - lb)/best_ub <= stop_gap):
             loop_start_time = time.time()
             with open(self.console_output_file, 'a') as file:
@@ -1280,7 +1218,6 @@ class IterateComb:
                         timelimit), file=file)
             n_Benders_iter += 1
 
-            # if time.time() - start_time > timelimit:
             if len(self.time_record_solve_MP) > 0:
                 if sum(self.time_record_solve_MP) + sum(self.time_record_solve_SP) > timelimit:
                     with open(self.console_output_file, 'a') as file:
@@ -1299,13 +1236,7 @@ class IterateComb:
                     remainint_time_MP = timelimit - optimize_time
                 print('update MP timelimit to: {}'.format(remainint_time_MP), file=file)
             self.MP.solve_model(use_i_ccg=use_i_ccg, remaining_time=remainint_time_MP, supposed_time_limit=self.MP.MP_timelimit)
-            # MP_solved_to_optimal = self.MP.solved_to_optimal
             self.time_record_solve_MP.append(time.time() - tmp)
-            # i_ub = self.MP.model.ObjBound
-            # i_ub = sum(self.data.Beta_hl[h, l] * round(self.MP.var.z[h, l].X) for (h, l) in self.data.Hub_pairs) + sum(
-            #     self.data.Scenarios_prob[s] * sum(
-            #         self.data.Trip_p_amount[s,r] * self.MP.var.gamma[s, r].X for r in self.data.Trips) for s in
-            #     self.data.Scenarios)  # inexact upper bound
             i_ub = self.MP.model.ObjBound  # inexact upper bound
             print('\t\t\t i_ub={:.4f}'.format(i_ub))
             if self.MP.model.MIPGap < 1e-6:
@@ -1329,20 +1260,6 @@ class IterateComb:
             with open(self.console_output_file, 'a') as file:
                 print('solve sub...', file=file)
             self.solve_subproblems_primal(n_iters=n_Benders_iter, revise_dual_value=self.revise_dual_value)
-
-            # ii=0
-            # for (s, r) in self.data.Sce_Trip:
-            #     print('***s={}, r={}, subobj={:.4f}'.format(s, r, self.varValue.latest_sub_obj[s, r]))
-            #     ii += 1
-            #     if ii > 10:
-            #         break
-            # print('max_pi1={:.4f}'.format(max(self.varValue.pi1.values())))
-            # a = self.varValue.pi1.values()
-            # a = [-i for i in a]
-            # print('min_pi1=-{:.4f}'.format(max(a)))
-            # for (h,l) in self.data.Hub_pairs:
-            #     print('h={}, l={}, pi2={:.4f}'.format(h, l, self.varValue.pi2[h,l]))
-            # print('sum_pi2={:.4f}'.format(sum(self.varValue.pi2.values())))
 
             with open(self.console_output_file, 'a') as file:
                 print('calculate ub...', file=file)
@@ -1389,9 +1306,6 @@ class IterateComb:
                                     continue  # when use disaggregated cut and the last cut is not violated, do not add cut again
                             self.n_cut_in_iter += 1
                             self.s_c_cut_stat[s,r] += 1
-                            # with open(self.console_output_file, 'a') as file:
-                            #     print('\t\t\t s={},r={}, deviation betwwen $zeta$ and sub_obj={}'.format(s, r,
-                            #                 self.varValue.latest_sub_obj[s, r] - self.varValue.gamma[s, r]), file=file)
                             # (add cut only when necessary) generate c & c in the master problem
                             self.MP.add_var_and_cons_ccg_primal(varValue=self.varValue, s=s, r=r)
                             if self.s_c_cut_stat[s,r] > 6:
@@ -1706,22 +1620,7 @@ class IterateComb:
         self.MP.model.setParam('TimeLimit', 3*timelimit)  # 3 times of timelimit. Terminate the model until optimization time exceeds timelimit.
         self.MP.model.setParam('LazyConstraints', 1)  # 3 times of timelimit. Terminate the model until optimization time exceeds timelimit.
 
-        # while True:
         self.MP.model.optimize(self.bd_callback)
-            # check whether a cut is missed
-            # if self.MP.model.Status == GRB.OPTIMAL:
-                # update UB
-                # ub = 0
-                # for s in self.data.Scenarios:
-                #     for r in self.data.Trips:
-                #         # update upper bound
-                #         ub += self.data.Scenarios_prob[s] * self.data.Trip_p_amount[s, r] * \
-                #               self.varValue.latest_sub_obj[
-                #                   s, r]
-                # ub += sum(self.data.Beta_hl[h, l] * round(self.varValue.z[h, l]) for (h, l) in self.data.Hub_pairs)
-
-        # with open(self.console_output_file, 'a') as file:
-        #     print('\t\t ub={:.2f}, lb={:.2f}'.format(ub, self.LB_record[-1]), file=file)
         if (self.UB_record[-1] - self.LB_record[-1]) / self.UB_record[-1] > 1e-5 and self.MP.model.SolCount > 0:  # when self.MP.model.SolCount==0, do not run this function sinse varValues or Bound may not be available.
             with open(self.console_output_file, 'a') as file:
                 print('\t\t Model terminated but the solution is not optimal.', file=file)
@@ -1757,18 +1656,6 @@ class IterateComb:
 
             self.update_cal_infor(n_Benders_iter=self.MP.model._n_Benders_iter, callback=True,
                                   node_count=self.record.get('n_node_BnB', None))
-
-        # else:
-        #     with open(self.console_output_file, 'a') as file:
-        #         print('\t\t Model terminated and optimality is achieved. Terminate.', file=file)
-        #     break
-
-
-
-
-
-        # if z_value != self.varValue.z or abs(model_bound - self.LB_record[-1]) > 1e-5:
-
 
     def update_cal_infor(self, n_Benders_iter, callback=False, node_count=None):
         self.record = {'time model creation':self.time_mdl_creation,

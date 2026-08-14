@@ -26,7 +26,6 @@ for theta_in_file in [0.0001, 0.002, 0.005]:
         )
     result_file = matches[0]
     df = pd.read_excel(result_file, sheet_name='obj_info')
-    # df = df[df['transport_mode'].isin(['all', 'shuttle', 'shuttle+bus'])]
     df = df[df['transport_mode']=='all']
     df['theta'] = [theta_in_file] * 4
     df = df[['theta', 'solution_type', 'income', 'transport_mode', 'n_trips', 'n_amount', 'model_distance', 'direct_distance', 'model_travel_time', 'direct_travel_time']]

@@ -46,7 +46,6 @@ if __name__ == '__main__':
             print('execute: ' + file_name, file=file)
         current_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
         out_xlsx_file = 'calculation_info_{}.xlsx'.format(current_time)
-        # try:
         for arc_elimination in [False]:
             for Delta_type in ['MST']:
                 with open(console_output_file, 'a') as file:
@@ -59,26 +58,24 @@ if __name__ == '__main__':
                 solution_strategy = 'process'
                 CCG_timelimit = args.time_limit
 
-                # stochastic - tree search (1000 iters) with CCG, no enhancement strategies
                 with open(console_output_file, 'a') as file:
                     print('********************Callback C&CG************************', file=file)
                 CCG_iterator_stoch = IterateComb(data=modeldata,
                                                  parallel_method='sequential',
-                                                 revise_dual_value=False,  # need to determine
-                                                 n_tree_iter_max=0,  # need to determine
+                                                 revise_dual_value=False,
+                                                 n_tree_iter_max=0,
                                                  )
                 CCG_iterator_stoch.start_Benders_iteration_callback(timelimit=CCG_timelimit, use_i_ccg=False)
                 result1 = CCG_iterator_stoch.update_result_ccg(result=result1,
                                                         read_data_time=read_data_time, tag='callbackCCG')
                 write_result(file_name=out_xlsx_file, result=result1)
                 del CCG_iterator_stoch
-                # stochastic - tree search (1000 iters) with CCG, no enhancement strategies
                 with open(console_output_file, 'a') as file:
                     print('********************Callback C&CG-tree100************************', file=file)
                 CCG_iterator_stoch = IterateComb(data=modeldata,
                                                  parallel_method='sequential',
-                                                 revise_dual_value=False,  # need to determine
-                                                 n_tree_iter_max=100,  # need to determine
+                                                 revise_dual_value=False,
+                                                 n_tree_iter_max=100,
                                                  )
                 CCG_iterator_stoch.start_Benders_iteration_callback(timelimit=CCG_timelimit, use_i_ccg=False)
                 result1 = CCG_iterator_stoch.update_result_ccg(result=result1,

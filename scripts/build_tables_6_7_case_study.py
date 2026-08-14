@@ -89,7 +89,6 @@ for theta_in_file in [0.0001, 0.002, 0.005]:
     df_trip_info_raw['time_cost'] = list_time_cost
     df_trip_info_raw['dist_cost'] = list_dist_cost
 
-    # df_trip_info_raw.to_csv('test.csv')  # output the detailed information of each trip when needed
 
     obj_detail_info = {
         'file_name': [],
@@ -103,8 +102,6 @@ for theta_in_file in [0.0001, 0.002, 0.005]:
         'model_travel_time': [],
         'direct_travel_time': [],
         'bus_transfer': [],
-        # 'time_cost': [],
-        # 'dist_cost': [],
     }
 
     for sol_type in ['stochastic', 'determi', 'stochastic_fix_z', 'stochastic_z_single', 'single_level_leader']:

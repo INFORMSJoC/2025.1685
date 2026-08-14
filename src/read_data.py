@@ -39,7 +39,6 @@ class Modeldata:
         self.arc_elimination = arc_elimination
         self.Delta_type = Delta_type
         self.bigM = 1e6  # to represent the distance of not directly connected nodes
-        # self.time_portion_gamma = 0.75  # assume travelling by shuttle requires 75% time cost of travelling by bus
         self.Delta_value = Delta_value
         self._read_excel()
         if self.leader_theta_given is not None:
@@ -67,17 +66,12 @@ class Modeldata:
 
         # read trip information
         print('read trip info...')
-        # for row_id, row in raw_data['Trip'].iterrows():
-        #     trip_id = row['trip_id']
-        #     self.Trip_p_amount[trip_id] = row['amount']
-        #     self.Trip_origin[trip_id] = row['origin']
-        #     self.Trip_destination[trip_id] = row['destination']
         trip_df = raw_data['Trip']
         self.Trip_p_amount = dict(zip(trip_df['trip_id'], trip_df['amount']))
         self.Trip_origin = dict(zip(trip_df['trip_id'], trip_df['origin']))
         self.Trip_destination = dict(zip(trip_df['trip_id'], trip_df['destination']))
 
-        # read trip_scale info 20241108
+        # Apply the scenario-specific demand scale.
         trip_scale = raw_data['Trip_scale']
         list_trips = raw_data['Trip']['trip_id'].tolist()
         trip_scale.index = list_trips
@@ -86,11 +80,9 @@ class Modeldata:
         dict_scale = trip_scale.stack().to_dict()  # value: r, s
 
         self.Trip_p_amount = {(s, r): max(1, np.round(self.Trip_p_amount[r] * dict_scale[r, s]))/50 for s in list_scenarios for r
-                              in list_trips}    # TODO: divide by 50 20241223
-        # self.Trip_p_amount = {(s,r): dict_scale[r,s]/50 for s in list_scenarios for r in list_trips}
+                              in list_trips}
 
-
-        # TODO: can be deleted when solving large-scale models whose raw file is already processed
+        # Retain only hubs and nodes that are endpoints of modeled trips.
         self.Node = list(set(list(self.Trip_origin.values()) + list(self.Trip_destination.values()) + self.Hub))
         self.Node.sort()
 
@@ -102,13 +94,10 @@ class Modeldata:
         if not self.arc_elimination:
             self.Arc = {(i, j) for i in self.Node for j in self.Node if i != j}
         else:
-            self.Arc = {(self.Trip_origin[r], h) for r in self.Trips for h in self.Hub}  # or->hubs
-            # self.Arc = self.Arc | {(h, self.Trip_origin[r]) for r in self.Trips for h in self.Hub}  # hubs->or
-            # self.Arc = self.Arc | {(self.Trip_destination[r], h) for r in self.Trips for h in self.Hub}  # de->hubs
-            self.Arc = self.Arc | {(h, self.Trip_destination[r]) for r in self.Trips for h in self.Hub}  # hubs->de
-            self.Arc = self.Arc | {(self.Trip_origin[r], self.Trip_destination[r]) for r in self.Trips}  # or->de
-            # self.Arc = self.Arc | {(self.Trip_destination[r], self.Trip_origin[r]) for r in self.Trips}  # de->or
-            self.Arc = self.Arc | {(h1, h2) for h1 in self.Hub for h2 in self.Hub if h1 != h2}  # hubs->hubs
+            self.Arc = {(self.Trip_origin[r], h) for r in self.Trips for h in self.Hub}
+            self.Arc = self.Arc | {(h, self.Trip_destination[r]) for r in self.Trips for h in self.Hub}
+            self.Arc = self.Arc | {(self.Trip_origin[r], self.Trip_destination[r]) for r in self.Trips}
+            self.Arc = self.Arc | {(h1, h2) for h1 in self.Hub for h2 in self.Hub if h1 != h2}
             self.Arc = [(i, j) for (i, j) in self.Arc if i != j]
 
         self.Node_pairs = self.Arc.copy()
@@ -122,27 +111,11 @@ class Modeldata:
                 {(h, self.Trip_destination[r]) for h in self.Hub} for r in self.Trips}  # simplified node pairs
         self.Node_of_trip = {r: [self.Trip_origin[r], self.Trip_destination[r]]+self.Hub for r in self.Trips}
 
-        # read distance information - Array
-        # print('read distance info...')
-        # self.dist_mat = raw_data['Fixed_distance'].copy()
-        # self.dist_mat.fillna(self.bigM, inplace=True)
-        # self.dist_mat.set_index('Distance', drop=True, inplace=True)
-        # for i in self.Node:
-        #     self.dist_mat.loc[i,i] = self.bigM
-
-        # # convert distance array to dict
-        # print('convert distance array to dict...')
-        # self.Dist = {(i, j): round(self.dist_mat.loc[i, j], 3) for i in self.Node for j in self.Node}  # round to circumvent numerical issues
         print('calculate distance dict...')
-        # if len(self.Node_all) < 90 and max(self.Node) < 90:
-        #     self.Dist = {(i, j): np.abs(self.node_lon[i] - self.node_lon[j]) ** 2 + np.abs(
-        #         self.node_lat[i] - self.node_lat[j]) ** 2 for (i, j) in self.Arc}
-        #     self.Dist = {key: np.sqrt(self.Dist[key]) / 10 for key in self.Dist}
-        # else:
         self.Dist = {
             (i, j): geodesic((self.node_lat[i], self.node_lon[i]), (self.node_lat[j], self.node_lon[j])).miles for
             (i, j) in self.Arc}
-        # eliminate the small values - 20241210
+        # Treat distances below 0.01 mile as zero.
         self.Dist = {key: (0 if value < 0.01 else value) for key, value in self.Dist.items()}
         print('calculate max distance...')
         self.max_distance = max([self.Dist[i, j] for (i, j) in self.Arc])
@@ -204,7 +177,7 @@ class Modeldata:
         # beta
         self.Beta_hl = {(h, l): (1 - (self.theta_leader_high_income if self.node_income_level[
                                                                            h] == 'High' else self.theta_follower_low_income)) * self.b_cost_bus * self.n_buses *
-                                self.Dist[h, l]/50 for h in self.Hub for l in self.Hub if (h, l) in self.Arc}  #TODO: divide beta by 50 20241223
+                                self.Dist[h, l]/50 for h in self.Hub for l in self.Hub if (h, l) in self.Arc}
 
         # tao
         self.tao_leader = {(h, l, s): (self.Travel_time[h, l, s] + self.S_wait_bus) * (
@@ -313,10 +286,7 @@ class Modeldata:
         plt.show()
 
     def cal_Delta(self):
-        # calculate a reasonable value of \Delta
-        # max(min_{d_{ij}}, ij\in min span tree), then each node hava access to at least one node within \Delta distance
-
-        # store as a graph
+        # The MST threshold ensures each node has at least one eligible connection.
         self.Graph = nx.Graph()
         self.Graph.add_weighted_edges_from([i, j, self.Dist[i, j]] for (i, j) in self.Arc)
 
@@ -330,7 +300,6 @@ class Modeldata:
             min_span_tree = nx.minimum_spanning_tree(self.Graph)
 
             list_edges = list(min_span_tree.edges())
-            # Delta = max([self.Dist[i,j] for (i,j) in list_edges])
             Delta = max([self.Dist[i, j] if (i, j) in self.Arc else self.Dist[j, i] for (i, j) in list_edges]) * 1.02
             Delta = {'High': Delta, 'Low': Delta, 'Middle': Delta}
 
@@ -346,37 +315,31 @@ class Modeldata:
         else:
             raise 'unknown Delta type: {}'.format(self.Delta_type)
 
-        # dist_arr = np.array(self.dist_mat)
-        # dist_arr_u = np.triu(dist_arr)
-        # dist_arr_u[dist_arr_u<=0] = self.bigM  # keep only the value of upper triangular to avoid rings
-        # row_min = np.min(dist_arr_u[:-1], axis=1)  # the minimum distance between node i and all other nodes, disgard the last line who contains only big M
-        # Delta = max(row_min)
-
         return Delta
 
     def output_to_disk(self):
-        """
-        output some critical information to the disk, which may be loaded by a function in parallel computing
-        :return:
+        """Write compact temporary data for parallel response-search workers.
+
+        Each worker loads only the scenario- and trip-specific information it needs
+        from these .pkl files. This avoids passing the full ``Modeldata`` object to
+        every worker. These files are not used by ``IterateComb.parallel_method``
+        when solving the later C&CG follower subproblems.
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)
-        output_folder = os.path.join(upper_2_dir, 'output', '{}_data_info'.format(os.path.basename(self.file_name)[:-5]))  # create a folder to store the information
-        # create an empty folder
+        output_folder = os.path.join(upper_2_dir, 'output', '{}_data_info'.format(os.path.basename(self.file_name)[:-5]))
         if os.path.exists(output_folder):
-            # Remove all contents inside the folder
             for filename in os.listdir(output_folder):
                 file_path = os.path.join(output_folder, filename)
                 try:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)  # remove file or symlink
+                        os.unlink(file_path)
                     elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)  # remove folder recursively
+                        shutil.rmtree(file_path)
                 except Exception as e:
                     print(f"Failed to delete {file_path}. Reason: {e}")
         else:
-            os.makedirs(output_folder)  # Create folder if it doesn't exist
-        # write required information
+            os.makedirs(output_folder)
 
         with open(os.path.join(output_folder, 'Hub_pairs.pkl'), 'wb') as f:
             pickle.dump(self.Hub_pairs, f)
@@ -422,20 +385,10 @@ class Modeldata:
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)
         output_folder = os.path.join(upper_2_dir, 'output', '{}_data_info'.format(
-            os.path.basename(self.file_name)[:-5]))  # create a folder to store the information
-
-        # for filename in os.listdir(output_folder):
-        #     file_path = os.path.join(output_folder, filename)
-        #     try:
-        #         if os.path.isfile(file_path) or os.path.islink(file_path):
-        #             os.unlink(file_path)  # Remove file or symlink
-        #         elif os.path.isdir(file_path):
-        #             shutil.rmtree(file_path)  # Remove directory and contents
-        #     except Exception as e:
-        #         print(f"Error deleting {file_path}: {e}")
+            os.path.basename(self.file_name)[:-5]))
 
         if os.path.exists(output_folder):
-            shutil.rmtree(output_folder)  # Deletes the entire folder and all its contents
+            shutil.rmtree(output_folder)
 
 
 
@@ -454,11 +407,6 @@ class Modeldata:
             plt.plot([self.node_lat[ori], self.node_lat[des]], [self.node_lon[ori], self.node_lon[des]], linewidth=1.2,
                      color='black', alpha=0.5, linestyle='--')
 
-        # draw arcs
-        # for (ori, des) in self.Arc:
-        #     plt.plot([self.node_lat[ori], self.node_lat[des]], [self.node_lon[ori], self.node_lon[des]], linewidth=0.8,
-        #              color='black', alpha=0.5, linestyle='--')
-
         plt.show()
 
 
@@ -472,17 +420,3 @@ if __name__ == '__main__':
     modeldata.output_to_disk()
     modeldata.plot_graph_lat_lon()
 
-    # dist = [modeldata.Dist[modeldata.Hub[i], modeldata.Hub[j]] for i in range(10) for j in range(10) if i<j]
-    # mean_dist = np.mean(dist)
-
-# theta = 0.1
-# S = 450
-# v = 24392*3600
-# d=4.44
-# g=2.86
-# b=7.24
-# n=16
-#
-# profit = (1-theta)*g/2*d+theta+d/v - theta*(d/v+S)
-# cost = (1-theta)*b*n*d
-# pr = cost/profit
