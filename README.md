@@ -6,16 +6,12 @@ This archive is distributed in association with the [INFORMS Journal on
 Computing](https://pubsonline.informs.org/journal/ijoc) under the [MIT
 License](LICENSE).
 
-This archive contains the software, instances, and results used for the paper
+The software and data in this repository are a snapshot of the software and data
+that were used in the research reported on in the paper 
 ["Stochastic Bilevel Optimization for the Network Design of Multimodal Transit
 Systems with Heterogeneous Rider Preferences under Uncertain Travel Times and
 Demand"](https://doi.org/10.1287/ijoc.2025.1685) by Suri Liu, Yiling Zhang,
 Beste Basciftci, and Wenyuan Wang.
-
-The code implements the response-search reformulation and the cutting-plane
-algorithms described in the paper. The archive follows the INFORMS Journal on
-Computing submission layout and contains the files used for Tables and
-Figures for numerical results.
 
 
 ## Cite
