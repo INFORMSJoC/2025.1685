@@ -823,7 +823,7 @@ class IterateComb:
     """
 
     def __init__(self, data: Modeldata, parallel_method='normal', revise_dual_value=False,
-                 n_tree_iter_max=100, preprocessing_cores=8):
+                 n_tree_iter_max=100, preprocessing_cores=1):
         """
         :param data:
         :param parallel_method: 'normal': persistent subproblem models;
@@ -831,7 +831,7 @@ class IterateComb:
                                 'sequential': rebuild and solve one subproblem at a time
         :param preprocessing_cores: number of response-search worker processes
                                     passed to PotentialHubFinder as n_core;
-                                    use 1 for serial preprocessing (default: 8)
+                                    use 1 for serial preprocessing (default: 1)
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)

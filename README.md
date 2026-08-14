@@ -63,7 +63,7 @@ The runners default to Table 3 and 600 seconds. Selecting `--table 4`
 automatically selects the Table 4 inputs and the 3600-second limit. Use
 `--time-limit` only to override the paper's limit.
 
-The RS runner uses 8 preprocessing workers by default. Set
+The RS runner uses serial preprocessing by default. Set
 `--preprocessing-cores` explicitly to reproduce each preprocessing column:
 
 ```bash

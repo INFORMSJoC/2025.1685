@@ -25,8 +25,8 @@ ALLOW_CORE = 16
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--time-limit", type=int, default=3600,
-                        help="C&CG time limit in seconds (default: 3600)")
+    parser.add_argument("--time-limit", type=int, default=43200,
+                        help="C&CG time limit in seconds (default: 43200)")  # run for 12 hours
     parser.add_argument("--use-i-ccg", type=int, choices=(0, 1), default=1,
                         help="Use inexact C&CG (default: 1)")
     return parser

@@ -20,8 +20,8 @@ def parse_args():
                         help="Paper table to reproduce (default: 3)")
     parser.add_argument("--time-limit", type=int, default=None,
                         help="MILP time limit in seconds (default: 600 for Table 3; 3600 for Table 4)")
-    parser.add_argument("--preprocessing-cores", type=int, choices=(1, 2, 4, 8, 16), default=8,
-                        help="Response-search workers; use 1 for serial preprocessing (default: 8)")
+    parser.add_argument("--preprocessing-cores", type=int, choices=(1, 2, 4, 8, 16), default=1,
+                        help="Response-search workers; use 1 for serial preprocessing (default: 1)")
     args = parser.parse_args()
     if args.time_limit is None:
         args.time_limit = {3: 600, 4: 3600}[args.table]
