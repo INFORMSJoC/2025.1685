@@ -411,7 +411,7 @@ class PotentialHubFinder():
         """
         find potential hub legs for all trips under all scenarios
         @:param parallel: whether or not use parallel
-        @:param n_core: number of cores being used
+        @:param n_core: number of preprocessing worker processes (default: 8)
         :return:
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))

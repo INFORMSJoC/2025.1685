@@ -823,12 +823,15 @@ class IterateComb:
     """
 
     def __init__(self, data: Modeldata, parallel_method='normal', revise_dual_value=False,
-                 n_tree_iter_max=100):
+                 n_tree_iter_max=100, preprocessing_cores=8):
         """
         :param data:
         :param parallel_method: 'normal': persistent subproblem models;
                                 'process': multiprocessing;
                                 'sequential': rebuild and solve one subproblem at a time
+        :param preprocessing_cores: number of response-search worker processes
+                                    passed to PotentialHubFinder as n_core;
+                                    use 1 for serial preprocessing (default: 8)
         """
         current_directory = os.path.dirname(os.path.abspath(__file__))
         upper_2_dir = os.path.dirname(current_directory)
@@ -838,6 +841,9 @@ class IterateComb:
         self.data = data
         self.data.output_to_disk()  # output the information to the disk
         self.n_tree_iter_max = n_tree_iter_max
+        if isinstance(preprocessing_cores, bool) or not isinstance(preprocessing_cores, int) or preprocessing_cores < 1:
+            raise ValueError('preprocessing_cores must be a positive integer')
+        self.preprocessing_cores = preprocessing_cores
         self.time_preprocess_tree_search = time.time()
         self.find_hub_legs()
         self.time_preprocess_tree_search = time.time() - self.time_preprocess_tree_search
@@ -908,7 +914,10 @@ class IterateComb:
         :return:
         """
         hub_finder = PotentialHubFinder(data=self.data, n_iter_max=self.n_tree_iter_max)
-        self.prefered_hubs, self.prefered_leader_obj, self.original_leader_obj, self.unexplred_probles, self.search_time_rec, self.search_iter_rec = hub_finder.find_hub_leg_all()  # find all potential hubs
+        self.prefered_hubs, self.prefered_leader_obj, self.original_leader_obj, self.unexplred_probles, self.search_time_rec, self.search_iter_rec = hub_finder.find_hub_leg_all(
+            parallel=self.preprocessing_cores > 1,
+            n_core=self.preprocessing_cores,
+        )  # find all potential hubs
         self.unexplred_probles = {key: value for key,value in self.unexplred_probles.items() if value}
         self.data.Sce_Trip_unexplored = list(set(self.unexplred_probles.keys()))
         self.data.Sce_Trip_unexplored.sort()

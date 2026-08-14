@@ -2,15 +2,20 @@
 
 # Stochastic Bilevel Network Design
 
+This archive is distributed in association with the [INFORMS Journal on
+Computing](https://pubsonline.informs.org/journal/ijoc) under the [MIT
+License](LICENSE).
+
 This archive contains the software, instances, and results used for the paper
-"Stochastic Bilevel Optimization for the Network Design of Multimodal Transit
+["Stochastic Bilevel Optimization for the Network Design of Multimodal Transit
 Systems with Heterogeneous Rider Preferences under Uncertain Travel Times and
-Demand" by Suri Liu, Yiling Zhang, Beste Basciftci, and Wenyuan Wang.
+Demand"](https://doi.org/10.1287/ijoc.2025.1685) by Suri Liu, Yiling Zhang,
+Beste Basciftci, and Wenyuan Wang.
 
 The code implements the response-search reformulation and the cutting-plane
 algorithms described in the paper. The archive follows the INFORMS Journal on
-Computing submission layout and contains only the files used for Tables 3-9 and
-Figures 3-5.
+Computing submission layout and contains the files used for Tables and
+Figures for numerical results.
 
 ## Requirements
 
@@ -19,68 +24,17 @@ Figures 3-5.
 - Gurobi 12.0 with a valid local license
 - Up to 16 CPU cores for the parallel response-search experiments
 
-Install the Python dependencies with:
-
-```bash
-python3.9 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-The Gurobi license is intentionally not included. Configure it using the
-standard Gurobi licensing procedure before running an optimization script.
+The code can also run on Windows system with a valid Gurobi license.
 
 ## Repository layout
 
 - `src/`: optimization models, data reader, response search, and evaluation code.
-- `scripts/`: experiment and postprocessing scripts named by paper output.
+- `scripts/`: experiment and postprocessing scripts named by paper output. The scripts starting with "run_" execute algorithms. Then run the scripts starting with "build_" to build tables using original outputs.
 - `data/`: the exact instances used for Tables 3-5 and the case study.
 - `results/`: reported workbooks, figures, and the raw files needed by plotting/postprocessing scripts.
 - `output/`: destination for newly generated solver output.
 
-See the README files inside `data/`, `scripts/`, and `results/` for the precise
-mapping between files and paper outputs.
 
-## Paper output coverage
-
-The archive includes every computational result reported in Tables 3-9 and
-Figures 3-5. The earlier numbered items are intentionally excluded:
-
-- Figure 1 is a conceptual multimodal-transit schematic used to introduce the
-  problem; it is not produced from an experiment or dataset.
-- Figure 2 is the illustrative four-hub network for Example 1, not an
-  experimental output.
-- Table 1 is the hand-worked output of Algorithm 1 on that four-hub example.
-- Table 2 sorts and deduplicates the same illustrative responses with
-  Algorithm 2.
-
-Consequently, Figures 1-2 and Tables 1-2 have no corresponding experiment
-scripts or result files to include. There are no other numbered tables or
-figures in the paper beyond Table 9 and Figure 5.
-
-## Data provenance and verification
-
-The data selection was checked against the files that generated the final
-reported results, rather than inferred only from directory names:
-
-1. The instance names recorded in the `file_name` column of the final Table 3,
-   Table 4, and Table 5 result workbooks were extracted, deduplicated, and
-   compared with the packaged workbook names. The comparisons were exact:
-   4/4 small, 6/6 medium, and 6/6 large instances, with no missing or extra
-   files. Table 9 records a four-instance subset of the six Table 5 instances.
-2. The case-study result archive identifies its final Section 6.3 run as the
-   batch with timestamp `2025-07-19-16-54-46`. The three packaged inputs use
-   that exact batch identifier and the three reported values
-   `theta = 0.0001`, `0.002`, and `0.005`.
-3. SHA-256 hashes were compared after copying. All 19 packaged instance
-   workbooks and all three network CSV files are byte-for-byte identical to
-   their selected source files.
-4. The network CSV files are plotting metadata, not optimization instances.
-   Their three names are referenced directly by
-   `scripts/build_figures_3_5_network_designs.py`.
-
-This establishes an auditable link from the final result records to the
-packaged inputs. Additional development instances were not included.
 
 ## Replicating the experiments
 
@@ -109,9 +63,23 @@ The runners default to Table 3 and 600 seconds. Selecting `--table 4`
 automatically selects the Table 4 inputs and the 3600-second limit. Use
 `--time-limit` only to override the paper's limit.
 
-For the preprocessing columns with 2, 4, 8, and 16 cores, run the RS command
-under the corresponding Linux CPU affinity or job-scheduler allocation. Use
-`ODMTS_PARALLEL_METHOD=normal` for the serial column.
+The RS runner uses 8 preprocessing workers by default. Set
+`--preprocessing-cores` explicitly to reproduce each preprocessing column:
+
+```bash
+python scripts/run_tables_3_4_response_search.py --preprocessing-cores 1
+python scripts/run_tables_3_4_response_search.py --preprocessing-cores 2
+python scripts/run_tables_3_4_response_search.py --preprocessing-cores 4
+python scripts/run_tables_3_4_response_search.py --preprocessing-cores 8
+python scripts/run_tables_3_4_response_search.py --preprocessing-cores 16
+```
+
+Use the same options together with `--table 4` for Table 4. A value of 1 runs
+the response search serially; larger values create exactly that many worker
+processes in `PotentialHubFinder.find_hub_leg_all`. Each run is written to a
+core-specific workbook so the timing results are not overwritten. Use
+`--preprocessing-cores 16` for the 16-core preprocessing time included in the
+paper's RS total-time column.
 
 ### Table 5
 
@@ -161,8 +129,26 @@ Figures 3 and 5.
 
 ## Cite
 
-Please cite both the paper and this software archive. The repository identifier
-is `2025.1685`; add the final journal and archive DOIs when they are assigned.
+To cite the contents of this repository, please cite both the paper and this
+software archive using their respective DOIs:
+
+https://doi.org/10.1287/ijoc.2025.1685
+
+https://doi.org/10.1287/ijoc.2025.1685.cd
+
+BibTeX for citing this software archive:
+
+```bibtex
+@misc{LiuEtAl2025Code,
+  author =        {Suri Liu and Yiling Zhang and Beste Basciftci and Wenyuan Wang},
+  publisher =     {INFORMS Journal on Computing},
+  title =         {{Stochastic Bilevel Network Design}},
+  year =          {2025},
+  doi =           {10.1287/ijoc.2025.1685.cd},
+  url =           {https://github.com/INFORMSJoC/2025.1685},
+  note =          {Available for download at https://github.com/INFORMSJoC/2025.1685},
+}
+```
 
 ## License
 

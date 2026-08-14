@@ -20,6 +20,8 @@ def parse_args():
                         help="Paper table to reproduce (default: 3)")
     parser.add_argument("--time-limit", type=int, default=None,
                         help="MILP time limit in seconds (default: 600 for Table 3; 3600 for Table 4)")
+    parser.add_argument("--preprocessing-cores", type=int, choices=(1, 2, 4, 8, 16), default=8,
+                        help="Response-search workers; use 1 for serial preprocessing (default: 8)")
     args = parser.parse_args()
     if args.time_limit is None:
         args.time_limit = {3: 600, 4: 3600}[args.table]
@@ -46,12 +48,16 @@ def main():
             parallel_method=parallel_method,
             revise_dual_value=True,
             n_tree_iter_max=10000,
+            preprocessing_cores=args.preprocessing_cores,
         )
         solve_info = solver.solve_uncompleted_MILP(time_limit=args.time_limit)
         solver.update_cal_infor(n_Benders_iter=0)
         solver.record.update(solve_info)
         results = solver.update_result_ccg(results, read_data_time=read_time, tag="RS")
-        write_result(file_name="tables_3_4_response_search.xlsx", result=results)
+        write_result(
+            file_name=f"tables_3_4_response_search_{args.preprocessing_cores}_cores.xlsx",
+            result=results,
+        )
 
 
 if __name__ == "__main__":
