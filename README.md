@@ -13,7 +13,6 @@ Systems with Heterogeneous Rider Preferences under Uncertain Travel Times and
 Demand"](https://doi.org/10.1287/ijoc.2025.1685) by Suri Liu, Yiling Zhang,
 Beste Basciftci, and Wenyuan Wang.
 
-
 ## Cite
 
 To cite the contents of this repository, please cite both the paper and this
@@ -59,8 +58,6 @@ The code can also run on Windows system with a valid Gurobi license.
 - `data/`: the exact instances used for Tables 3-5 and the case study.
 - `results/`: reported workbooks, figures, and the raw files needed by plotting/postprocessing scripts.
 - `output/`: destination for newly generated solver output.
-
-
 
 ## Replicating the experiments
 
@@ -149,75 +146,5 @@ python scripts/run_table_9_callback_comparison.py
 ## Results
 
 The final computational tables are in `results/tables`, and the computational
-figures are in `results/figures`. Raw solutions used in Tables 6-8 andFigures 4 
+figures are in `results/figures`. Raw solutions used in Tables 6-8 and Figures 4 
 can be found in `results/raw`.
-
-
-Table 3 in the paper reports the preprocessing time of the response search algorithm 
-under parallel implementations with different numbers of cores, along with the MILP
- solution times and the number of nodes explored under the studied single-level reformulations.
-
-![Table 3](results/tables/table_3_small_instances.xlsx)
-
-Table 4 in the paper reports the number of iterations needed by the response 
-search algorithm (both the maximum and average iterations over all follower-scenario
-pairs) under the Column “RS Iters”.
-
-![Table 4](results/tables/table_4_medium_instances_raw.xlsx)
-
-
-Table 5 in the paper compares the decomposition algorithm proposed in Section 5 
-against the RS reformulation on several instances.
-
-![Table 5](results/tables/table_5_large_instances_raw.xlsx)
-![Table 5 instances](data/table_5_large_instances), 6 *.xlsx files
-
-Table 6 provides the resulting comparisons where the investment cost indicates the
-total weighted cost of operating bus legs, whereas the travel disutilities correspond
-to the disutilities realized by the transit agency and the riders as obtained 
-from their corresponding leader and follower problems. 
-
-Table 7 provides the durations of the suggested paths to the riders by the 
-transit agency under the stochastic bilevel model for riders with different income levels.
-
-Table 8 compares the impact of θ_l value on the decisions of the leader and follower problems.
-
-![Table 6-8](results/tables/Table_6-8_practical.xlsx)
-
-Table 9 presents a computational comparison of the cutting-plane algorithm 
-implemented using Gurobi’s branch-and-cut framework via callback functions, 
-both without and with RS constraints, denoted as Call back and Callback+RS, respectively.
-
-![Table 9](results/tables/Table_9_callback.xlsx)
-
-
-
-Figure 3 in the paper presents the resulting network designs, where each 
-open hub is represented with a unique color, while the origins of the trips using 
-the corresponding hub as part of their initial transfer stop are marked with the same color.
-
-![Figure 3](results/figure_3), 3 *.jpg files
-
-Figure 4 in the paper shows the distributions of the iterations explored in 
-the response search algorithm for the instances reported in Table 4. 
-
-![Figure 4](results/figure_4), 6 *.png files
-
-Figure 5 in the paper shows the network designs under different θ_l values.
-
-![Figure 5](results/figure_5), 2 *.jpg files
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
