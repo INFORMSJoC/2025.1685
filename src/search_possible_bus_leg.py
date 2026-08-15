@@ -24,100 +24,10 @@ import pickle
 import networkx as nx
 
 
-class RoutineFinder():
-    """
-    find the shortest path given a trip r under scenario s
-    """
-    def __init__(self, data: Modeldata, s, r):
-        self.data = data
-        self.s = s
-        self.r = r
-        self.forbiden_leg = []  # [(h,l), ...]
-
-    def solve_model(self):
-        s = self.s
-        r = self.r
-        with gp.Env() as env, gp.Model('SubShortestPathWithStrongDualModel', env=env) as model:
-            # add variables
-            x = model.addVars(
-                gp.tuplelist((h, l) for (h, l) in self.data.Hub_pairs),
-                vtype=GRB.CONTINUOUS, name='x')
-            y = model.addVars(
-                gp.tuplelist((i, j) for (i, j) in self.data.Node_pairs_for_mdl_sp[r]),
-                vtype=GRB.CONTINUOUS, name='y')
-            z = model.addVars(
-                self.data.Hub_pairs, vtype=GRB.BINARY)
-            for (h,l) in self.forbiden_leg:
-                z[h,l].setAttr('ub', 0)
-
-            # add constraints
-            i = self.data.Trip_origin[r]
-            model.addConstr((gp.quicksum(
-                x[i, h] - x[h, i] for h in self.data.Hub if
-                (i, h) in self.data.Hub_pairs) + gp.quicksum(
-                y[i, j] for j in self.data.Node_of_trip[r] if
-                (i, j) in self.data.Node_pairs_for_mdl_sp[r]) - gp.quicksum(
-                y[j, i] for j in self.data.Node_of_trip[r] if (j, i) in self.data.Node_pairs_for_mdl_sp[r]) == 1),
-                            name='c_flb_or')
-            i = self.data.Trip_destination[r]
-            model.addConstr((gp.quicksum(
-                x[i, h] - x[h, i] for h in self.data.Hub if
-                (i, h) in self.data.Hub_pairs) + gp.quicksum(
-                y[i, j] for j in self.data.Node_of_trip[r] if
-                (i, j) in self.data.Node_pairs_for_mdl_sp[r]) - gp.quicksum(
-                y[j, i] for j in self.data.Node_of_trip[r] if (j, i) in self.data.Node_pairs_for_mdl_sp[r]) == -1),
-                            name='c_flb_de')
-            model.addConstrs((gp.quicksum(
-                x[i, h] - x[h, i] for h in self.data.Hub if
-                (i, h) in self.data.Hub_pairs) + gp.quicksum(
-                y[i, j] for j in self.data.Node_of_trip[r] if
-                (i, j) in self.data.Node_pairs_for_mdl_sp[r]) - gp.quicksum(
-                y[j, i] for j in self.data.Node_of_trip[r] if (j, i) in self.data.Node_pairs_for_mdl_sp[r]) == 0 for i
-                              in
-                              self.data.Node_of_trip[r] if
-                              i not in [self.data.Trip_origin[r],
-                                        self.data.Trip_destination[r]]),
-                             name='c_flb_normal')
-            model.addConstrs(
-                (x[h, l] <= z[h, l] for (h, l) in self.data.Hub_pairs),
-                name='conn_enable')
-
-            model.addConstrs((x[h, l] <= 1 for (h, l) in self.data.Hub_pairs), name='x_ub')
-            model.addConstrs((y[i, j] <= 1 for (i, j) in self.data.Node_pairs_for_mdl_sp[r]), name='y_ub')
-
-            # set objective - follower
-            obj_follower = gp.quicksum(
-                self.data.tao_follower[h, l, s] * x[h, l] for (h, l) in self.data.Hub_pairs)
-            obj_follower += gp.quicksum(
-                self.data.gamma_follower[i, j, s] * y[i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r])
-            model.setObjective(obj_follower)
-
-            # calculate objective -leader
-            obj_leader = gp.quicksum(
-                self.data.tao_leader[h, l, s] * x[h, l] for (h, l) in self.data.Hub_pairs)
-            obj_leader += gp.quicksum(
-                self.data.gamma_leader[i, j, s] * y[i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r])
-
-            # model.setParam('TimeLimit', 360)  # 10 minutes
-            model.setParam('LogToConsole', 0)
-            model.optimize()
-
-            opened_bus_leg = [(h,l) for (h,l) in self.data.Hub_pairs if x[h,l].X > 0.9]
-            opened_bus_leg.sort()
-            result = {
-                'used_leg': opened_bus_leg,
-                'obj_follower': obj_follower.getValue(),
-                'obj_leader': obj_leader.getValue()
-            }
-
-            return result
-
-
 def find_hub_leg_indep_fun(idx_list, file_name, n_iter_max):
     """
     find potential bus leg routines for trip r under scenario s
     this is an independent function without relying on a class
-    :param args: idx_list: [(s1,r1), (s2,r2), ...]
     :return:
     """
     class Data():
@@ -355,51 +265,6 @@ class PotentialHubFinder():
         self.data = data
         self.n_iter_max = n_iter_max
 
-    def find_hub_leg(self, s,r):
-        """
-        find potential bus leg routines for trip r under scenario s
-        :param args: (s,r)
-        :return:
-        """
-        start_time = time.time()
-        bus_leg_sol = []  # all possible bus leg routines[[(1,2), (2,3)], [(3,4)], ...]
-        sol_id = 0
-        leader_obj = {}  # the leader obj associated with each bus leg selection
-        follower_obj = {}  # the follower obj associated with each bus leg selection
-        node_to_explore = queue.Queue()  # tree search records
-        node_to_explore.put(RoutineFinder(self.data, s,r))  # tree search records
-        not_completely_explored = False
-        n_iters = 0
-        while node_to_explore.qsize() > 0:
-            node = node_to_explore.get()
-            result = node.solve_model()
-            if len(result['used_leg']) > 0:
-                if result['used_leg'] not in bus_leg_sol:
-                    bus_leg_sol.append(result['used_leg'])  # record used bus leg
-                    leader_obj[sol_id] = result['obj_leader']  # record associated bus leg
-                    follower_obj[sol_id] = result['obj_follower']  # record associated bus leg
-                    sol_id += 1
-                for (h,l) in result['used_leg']:
-                    node_new = RoutineFinder(self.data, s, r)
-                    node_new.forbiden_leg = node.forbiden_leg.copy()
-                    node_new.forbiden_leg.append((h,l))
-                    node_to_explore.put(node_new)
-            n_iters += 1
-            if n_iters > self.n_iter_max or node_to_explore.qsize() + n_iters > self.n_iter_max:
-                not_completely_explored = True
-                break
-        node_new = RoutineFinder(self.data, s, r)
-        node_new.forbiden_leg = self.data.Hub_pairs
-        result = node_new.solve_model()
-        original_leader_obj = result['obj_leader']  # the leader obj when all hubs are closed
-
-        sorted_follower_obj = dict(sorted(follower_obj.items(), key=lambda item: item[1], reverse=False))  # sort by obj value, asscending
-        sorted_leader_obj = {key: leader_obj[key] for key in sorted_follower_obj}
-        sorted_leader_obj = {i: value for i, value in enumerate(sorted_leader_obj.values())}
-        sorted_bus_leg_sol = [bus_leg_sol[key] for key in sorted_follower_obj]
-        search_time = round(time.time() - start_time, 5)
-        return sorted_bus_leg_sol, sorted_leader_obj, original_leader_obj, not_completely_explored, sorted_follower_obj, search_time
-
     def find_hub_leg_all(self, parallel=False, n_core=8):
         """
         find potential hub legs for all trips under all scenarios
@@ -506,32 +371,6 @@ class PotentialHubFinder():
 
         return prefered_hubs, prefered_leader_obj, original_leader_obj, not_completely_explored, search_time_rec, search_iter_rec
 
-
-if __name__ == '__main__':
-    file_list = ['../data/cluster/test_delete_16-2.xlsx']
-    file_name = file_list[0]
-    data = Modeldata(file_name=file_name, arc_elimination=True, Delta_type='MST', Delta_value=5)
-    hub_finder = PotentialHubFinder(data=data)
-    prefered_hubs, prefered_leader_obj, original_leader_obj, not_completely_explored, search_time_rec = hub_finder.find_hub_leg_all(parallel=False)
-    opened_legs = [tp for i in prefered_leader_obj for item in prefered_hubs[i] for tp in item]
-
-    opened_legs = list(set(opened_legs))
-    opened_legs.sort()
-    print(opened_legs)
-    print('{} bus legs are possible to be opened'.format(len(opened_legs)))
-
-    dict_df = {
-        's': [],
-        'r': [],
-        'n_routine': []
-    }
-    for s,r in data.Sce_Trip:
-        dict_df['s'].append(s)
-        dict_df['r'].append(r)
-        dict_df['n_routine'].append(len(prefered_leader_obj[s,r]))
-
-    df = pd.DataFrame.from_dict(dict_df)
-    df.to_excel('test.xlsx')
 
 
 

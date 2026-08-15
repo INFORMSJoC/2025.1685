@@ -46,12 +46,7 @@ def get_parser():
     parser.add_argument("--stop_gap", type=float, help="stop gap CCG", default=1e-5)
     parser.add_argument("--MP_ini_gap", type=float, help="initial gap of MP", default=0.1)
 
-
     return parser
-
-
-
-
 
 
 class SubShortestPathWithStrongDualModel():
@@ -166,17 +161,11 @@ class SubShortestPathWithStrongDualModel():
     def delete_strong_dual(self):
         self.model.remove(self.cons.strong_dual)
 
-    def write_lp_basis_info(self, use_lp_basis=False, VBasis=None, CBasis=None):
-        if use_lp_basis:
-            self.model.update()
-            self.model.setParam('LPWarmStart', 2)  # enable LP warm start
-            if VBasis is not None:
-                self.model.setAttr('VBasis', self.model.getVars(), VBasis)
-            if CBasis is not None:
-                self.model.setAttr('CBasis', self.model.getConstrs(), CBasis)
+    def write_lp_basis_info(self):
+
         self.set_obj_follower()
 
-    def obtain_solution_info(self, use_lp_basis=False):
+    def obtain_solution_info(self):
         pi1 = {i: - self.model.getConstrByName(f'c_flb_normal[{i}]').pi for i in
                self.data.Node_of_trip[self.r] if
                i not in [self.data.Trip_origin[self.r],
@@ -187,12 +176,9 @@ class SubShortestPathWithStrongDualModel():
         pi3 = {(h, l): - self.model.getConstrByName(f'x_ub[{h},{l}]').pi for (h, l) in self.data.Hub_pairs}
         pi4 = {(i, j): - self.model.getConstrByName(f'y_ub[{i},{j}]').pi for (i, j) in self.data.Node_pairs_for_mdl_sp[self.r]}
 
-        if self.s == self.data.Scenarios[0] and use_lp_basis:
-            VBasis = self.model.getAttr('VBasis', self.model.getVars())
-            CBasis = self.model.getAttr('CBasis', self.model.getConstrs())[:-1]
-        else:
-            VBasis = None
-            CBasis = None
+        VBasis = None
+        CBasis = None
+
 
         result = {
                   'x': {key: self.var.x[key].X for key in self.var.x},
@@ -213,13 +199,10 @@ class SubShortestPathWithStrongDualModel():
         self.add_strong_dual()
         self.set_obj_leader()
 
-    def create_and_solve_by_with_revise_dual(self, s, r, param_z, use_lp_basis=False, VBasis=None, CBasis=None,
-                                     VBasis_info=None, need_x=True):
+    def create_and_solve_by_with_revise_dual(self, s, r, param_z, need_x=True):
         """
         create and solve using the with clause, meahwhile revise the dual variables
         :param param_z: only the varvalue of z is required
-        :param ini_sol: initial solution
-        :param use_lp_basis: whether use lp basis for warm start
         """
         with gp.Env() as env, gp.Model('SubModel', env=env) as model:
             # add variables
@@ -331,7 +314,6 @@ class SubShortestPathWithStrongDualModel():
                 x = {}
                 y = {}
 
-
             result = {'pi1': {key: pi1[key].X for key in pi1},
                       'pi2': {key: pi2[key].X for key in pi2},
                       'pi3': {key: pi3[key].X for key in pi3},
@@ -340,14 +322,13 @@ class SubShortestPathWithStrongDualModel():
                       'x': x,
                       'y': y,
                       'obj': obj.getValue(),
-                      'VBasis': VBasis,
-                      'CBasis': CBasis,
+                      'VBasis': None,
+                      'CBasis': None,
                       'sol_time': sol_time}
 
             return {(s, r): result}
 
-
-    def create_and_solve_by_with(self, s, r, z_param, use_lp_basis=False, VBasis=None, CBasis=None, need_x=True):
+    def create_and_solve_by_with(self, s, r, z_param, need_x=True):
         with gp.Env() as env, gp.Model('SubModel', env=env) as model:
             # add variables
             pi1 = model.addVars(self.data.Node_of_trip[r], vtype=GRB.CONTINUOUS, name='pi_1', lb=-GRB.INFINITY)
@@ -447,129 +428,12 @@ class SubShortestPathWithStrongDualModel():
                       'x': x,
                       'y': y,
                       'obj': obj.getValue(),
-                      'VBasis': VBasis,
-                      'CBasis': CBasis,
+                      'VBasis': None,
+                      'CBasis': None,
                       'sol_time': sol_time}
 
             return {(s, r): result}
 
-
-    def create_and_solve_by_with_old_use_primal_space(self, s, r, z_param, use_lp_basis=False, VBasis=None, CBasis=None, need_x=True):
-        with gp.Env() as env, gp.Model('SubShortestPathWithStrongDualModel', env=env) as model:
-            # add variables
-            x = model.addVars(
-                gp.tuplelist((h, l) for (h, l) in self.data.Hub_pairs),
-                vtype=GRB.CONTINUOUS, name='x')
-            y = model.addVars(
-                gp.tuplelist((i, j) for (i, j) in self.data.Node_pairs_for_mdl_sp[r]),
-                vtype=GRB.CONTINUOUS, name='y')
-
-            # add constraints
-            i = self.data.Trip_origin[r]
-            model.addConstr((gp.quicksum(
-                x[i, h] - x[h, i] for h in self.data.Hub if
-                (i, h) in self.data.Hub_pairs) + gp.quicksum(
-                y[i, j] for j in self.data.Node_of_trip[r] if
-                (i, j) in self.data.Node_pairs_for_mdl_sp[r]) - gp.quicksum(
-                y[j, i] for j in self.data.Node_of_trip[r] if (j, i) in self.data.Node_pairs_for_mdl_sp[r]) == 1), name='c_flb_or')
-            i = self.data.Trip_destination[r]
-            model.addConstr((gp.quicksum(
-                x[i, h] - x[h, i] for h in self.data.Hub if
-                (i, h) in self.data.Hub_pairs) + gp.quicksum(
-                y[i, j] for j in self.data.Node_of_trip[r] if
-                (i, j) in self.data.Node_pairs_for_mdl_sp[r]) - gp.quicksum(
-                y[j, i] for j in self.data.Node_of_trip[r] if (j, i) in self.data.Node_pairs_for_mdl_sp[r]) == -1),
-                                                            name='c_flb_de')
-            model.addConstrs((gp.quicksum(
-                x[i, h] - x[h, i] for h in self.data.Hub if
-                (i, h) in self.data.Hub_pairs) + gp.quicksum(
-                y[i, j] for j in self.data.Node_of_trip[r] if
-                (i, j) in self.data.Node_pairs_for_mdl_sp[r]) - gp.quicksum(
-                y[j, i] for j in self.data.Node_of_trip[r] if (j, i) in self.data.Node_pairs_for_mdl_sp[r]) == 0 for i in
-                                                                  self.data.Node_of_trip[r] if
-                                                                  i not in [self.data.Trip_origin[r],
-                                                                            self.data.Trip_destination[r]]),
-                                                                 name='c_flb_normal')
-            model.addConstrs(
-                (x[h, l] <= z_param[h, l] for (h, l) in self.data.Hub_pairs),
-                name='conn_enable')
-
-            model.addConstrs((x[h, l] <= 1 for (h, l) in self.data.Hub_pairs), name='x_ub')
-            model.addConstrs((y[i, j] <= 1 for (i, j) in self.data.Node_pairs_for_mdl_sp[r]), name='y_ub')
-
-            # set objective - follower
-            obj_follower = gp.quicksum(
-                self.data.tao_follower[h, l, s] * x[h, l] for (h, l) in self.data.Hub_pairs)
-            obj_follower += gp.quicksum(
-                self.data.gamma_follower[i, j, s] * y[i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r])
-            model.setObjective(obj_follower)
-
-            # warm start
-            if use_lp_basis:
-                if VBasis is not None or CBasis is not None:
-                    model.update()
-                    model.setParam('LPWarmStart', 2)  # enable LP warm start
-                    if VBasis is not None:
-                        model.setAttr('VBasis', model.getVars(), VBasis)
-                    if CBasis is not None:
-                        model.setAttr('CBasis', model.getConstrs(), CBasis)
-
-            # model.setParam('TimeLimit', 360)  # 10 minutes
-            model.setParam('LogToConsole', 0)
-            model.optimize()
-            # add strong duality
-            if model.Status != 2:
-                with open(self.console_output_file, 'a') as file:
-                    print('model is not solved to optimal, StatusCode:{}'.format(model.Status), file=file)
-                model.write('nonoptimal_sub.lp')
-            eta = model.getObjective().getValue()
-            model.addConstr(obj_follower <= eta, name='strong_dual')  # add strong duality constraint
-            # set objective -leader
-            obj_leader = gp.quicksum(
-                self.data.tao_leader[h, l, s] * x[h, l] for (h, l) in self.data.Hub_pairs)
-            obj_leader += gp.quicksum(
-                self.data.gamma_leader[i, j, s] * y[i, j] for (i, j) in self.data.Node_pairs_for_mdl_sp[r])
-            model.setObjective(obj_leader)
-            model.optimize()
-
-            pi1 = {i: - model.getConstrByName(f'c_flb_normal[{i}]').pi for i in
-                   self.data.Node_of_trip[r] if
-                   i not in [self.data.Trip_origin[r],
-                             self.data.Trip_destination[r]]}
-            pi1[self.data.Trip_origin[r]] = - model.getConstrByName('c_flb_or').pi
-            pi1[self.data.Trip_destination[r]] = - model.getConstrByName('c_flb_de').pi
-            pi2 = {(h, l): - model.getConstrByName(f'conn_enable[{h},{l}]').pi for (h, l) in self.data.Hub_pairs}
-            pi3 = {(h, l): - model.getConstrByName(f'x_ub[{h},{l}]').pi for (h, l) in self.data.Hub_pairs}
-            pi4 = {(i, j): - model.getConstrByName(f'y_ub[{i},{j}]').pi for (i, j) in self.data.Node_pairs_for_mdl_sp[r]}
-
-            if s == self.data.Scenarios[0] and use_lp_basis:
-                VBasis = model.getAttr('VBasis', model.getVars())
-                CBasis = model.getAttr('CBasis', model.getConstrs())[:-1]
-            else:
-                VBasis = None
-                CBasis = None
-
-            if need_x:
-                x = {key: x[key].X for key in x if x[key].X}
-                y = {key: y[key].X for key in y if y[key].X}
-            else:
-                x = None
-                y = None
-
-            result = {
-                'x': x,
-                'y': y,
-                'pi1': pi1,
-                'pi2': pi2,
-                'pi3': pi3,
-                'pi4': pi4,
-                't': - model.getConstrByName('strong_dual').pi,
-                'obj': obj_leader.getValue(),
-                'VBasis': VBasis,
-                'CBasis': CBasis
-            }
-
-            return {(s,r): result}
 
 
 class VarValue:
@@ -595,7 +459,6 @@ class VarValue:
         self.t_all = {}
 
         self.latest_sub_obj = {}  # obj of the dual subproblem in CCG, not the primal shortest path problem
-
 
         self.x = {}
         self.y = {}
@@ -624,13 +487,8 @@ class VarValue:
 
     def update_Master_var(self, var):
         self.z = {key: round(var.z[key].X) for key in var.z}
-        if var.gamma_exist:
-            self.gamma = {key: var.gamma[key].X for key in var.gamma}
-        else:
-            if var.use_part_agg:
-                self.gamma_part = {key: var.gamma_agg_part[key].X for key in var.gamma_agg_part}
-            else:
-                self.gamma_single = var.gamma_agg.X
+        self.gamma = {key: var.gamma[key].X for key in var.gamma}
+
         self.n_iters = var.n_iters
 
     def update_Master_var_callback(self, z, gamma, n_iters):
@@ -650,46 +508,8 @@ class VarValue:
     def update_sp_obj_directly_from_mp_callback(self, gamma:dict):
         """
         update sub obj for s,r in self.data.explored
-        :param var:
-        :return:
         """
         self.latest_sub_obj.update(gamma)
-
-
-    def update_Master_var_Benders(self, z, gamma, n_iters):
-        self.z = z.copy()
-        self.gamma = gamma.copy()
-        self.n_iters = n_iters
-
-    def update_Master_theta(self, var):
-        self.theta1.update(
-            {key_o: {key_i: var.theta1[key_o][key_i].X for key_i in var.theta1[key_o]} for key_o in var.theta1})
-        self.theta2.update(
-            {key_o: {key_i: var.theta2[key_o][key_i].X for key_i in var.theta2[key_o]} for key_o in var.theta2})
-        self.theta3.update(
-            {key_o: {key_i: var.theta3[key_o][key_i].X for key_i in var.theta3[key_o]} for key_o in var.theta3})
-        self.theta4.update(
-            {key_o: {key_i: var.theta4[key_o][key_i].X for key_i in var.theta4[key_o]} for key_o in var.theta4})
-        self.delta.update(
-            {key_o: {key_i: var.delta[key_o][key_i].X for key_i in var.delta[key_o]} for key_o in var.delta})
-
-
-
-    def update_Sub_var(self, s, r, pi1, pi2, pi3, pi4, t, obj):
-        """
-        update sub vars value
-        :param s: scenario
-        :param r: trip
-        :param var: including pi1, pi2, pi3, pi4, t
-        :return:
-        """
-        self.pi1.update({(s, r,) + (key,): pi1[key] for key in pi1})
-        self.pi2.update({(s, r,) + key: pi2[key] for key in pi2})
-        self.pi3.update({(s, r,) + key: pi3[key] for key in pi3})
-        self.pi4.update({(s, r,) + key: pi4[key] for key in pi4})
-
-        self.t.update({(s, r,): t})
-        self.latest_sub_obj.update({(s,r,): obj})
 
     def update_best_z(self):
         self.best_z = self.z.copy()
@@ -726,13 +546,6 @@ class VarValue:
 
         self.latest_sub_obj.update({(s, r,): obj})
 
-    def record_pi_value(self):
-        self.pi1_all.update({self.n_iters: self.pi1.copy()})
-        self.pi2_all.update({self.n_iters: self.pi2.copy()})
-        self.pi3_all.update({self.n_iters: self.pi3.copy()})
-        self.pi4_all.update({self.n_iters: self.pi4.copy()})
-        self.t_all.update({self.n_iters: self.t.copy()})
-
     def update_x_y(self, s, r, x_sol, y_sol):
         if len(x_sol):
             self.x.update({(s,r,)+key: x_sol[key] for key in x_sol})
@@ -742,7 +555,9 @@ class VarValue:
 
 
 class OneStageModelFullMultiplierDepends():
-    """Here we have full multipliers for x>=0, but only added when using KKT condition"""
+    """
+    Single-level reformulation.
+    Here, we have full multipliers for x>=0, but only added when using KKT condition"""
     def __init__(self, data: Modeldata, use_KKT=True, use_sos1=True, use_bigM=True, add_strong_dual=False, add_why_no_need_M=False):
         """
         initial function
@@ -954,9 +769,6 @@ class OneStageModelFullMultiplierDepends():
              self.data.Sce_Trip for
              (h, l) in self.data.Hub_pairs), name='aux_obj_3')
 
-
-
-
         # complementary slackness
         if self.use_bigM:
             self._add_cons_kkt_bigM()
@@ -1034,49 +846,6 @@ class OneStageModelFullMultiplierDepends():
                     self.cons.sos_5[s, r, i, j] = self.model.addSOS(GRB.SOS_TYPE1, [self.var.multi_noneg_y[s, r, i, j],
                                                                                     self.var.y[s, r, i, j]], [1, 2])
 
-    def check_KKT(self):
-        print('>>>>>>>>>>>>check KKT correctness')
-        for (s, r) in self.data.Sce_Trip:
-            print('----------------c:beta----------------')
-            for (h, l) in self.data.Hub_pairs:
-                r1 = self.var.beta[s, r, h, l]
-                r2 = self.var.x[s, r, h, l] - self.var.z[h, l]
-                if r1.X * r2.getValue() > 1e-8:
-                    print('s={}, r={}, h={}, l={},\t multiplier={:.6f},  LinExp={:.6f},  production={:.6f}'.format(s,r,h,l,r1.X,r2.getValue(),r1.X * r2.getValue()))
-
-            print('----------------c:mu----------------')
-            for (h, l) in self.data.Hub_pairs:
-                r1 = self.var.mu[s, r, h, l]
-                r2 = self.var.x[s, r, h, l] - 1
-                if r1.X * r2.getValue():
-                    print('s={}, r={}, h={}, l={},\t multiplier={:.6f},  LinExp={:.6f},  production={:.6f}'.format(s, r, h, l, r1.X,
-                                                                                                         r2.getValue(),
-                                                                                                         r1.X * r2.getValue()))
-
-            print('----------------c:zeta----------------')
-            for (i, j) in self.data.Node_pairs_for_mdl_sp[r]:
-                r1 = self.var.zeta[s, r, i, j]
-                r2 = self.var.y[s, r, i, j] - 1
-                if r1.X * r2.getValue():
-                    print('s={}, r={}, h={}, l={},\t multiplier={:.6f},  LinExp={:.6f},  production={:.6f}'.format(s, r, i, j, r1.X,
-                                                                                                         r2.getValue(),
-                                                                                                         r1.X * r2.getValue()))
-
-    def fix_follower_var(self, varValue):
-        # take optimal solution of mdl into this model to verify the feasibility
-        print('fix the vars x,y,z... ...')
-        for (s, r) in self.data.Sce_Trip:
-            for (h, l) in self.data.Hub_pairs:
-                self.var.x[s, r, h, l].setAttr('lb', varValue.x[s, r, h, l])
-                self.var.x[s, r, h, l].setAttr('ub', varValue.x[s, r, h, l])
-            for (i, j) in self.data.Node_pairs_for_mdl_sp[r]:
-                self.var.y[s, r, i, j].setAttr('lb', varValue.y[s, r, i, j])
-                self.var.y[s, r, i, j].setAttr('ub', varValue.y[s, r, i, j])
-
-        for (h,l) in self.data.Hub_pairs:
-            self.var.z[h,l].setAttr('lb', varValue.z[h,l])
-            self.var.z[h, l].setAttr('ub', varValue.z[h, l])
-
     def _add_cons_strong_duality(self):
         self.obj_dual = {}
         self.obj_primal = {}
@@ -1119,12 +888,6 @@ class OneStageModelFullMultiplierDepends():
             self.model.addConstrs((self.obj_dual[s, r] >= self.obj_primal[s, r] for (s, r) in self.data.Sce_Trip),
                                  name='why_no_need_M')
 
-    def present_obj_follower(self):
-        print('>>>>> present the obj of follower')
-        for (s, r) in self.data.Sce_Trip:
-            print('s={}, r={}, obj_primal={}, obj_dual={}'.format(s, r, self.obj_primal[s, r].getValue(),
-                                                                  self.obj_dual[s, r].getValue()))
-
 
     def set_objective(self):
 
@@ -1162,7 +925,7 @@ class OneStageModelFullMultiplierDepends():
         :return: no return
         """
         result['file_name'].append(os.path.basename(self.data.file_name))
-        result['node-hub-trip-passenger'].append(re.findall(r'\d+', self.data.file_name)[:4])
+        result['node-hub-trip-passenger'].append(re.findall(r'\d+', os.path.basename(self.data.file_name))[:4])
         result['arc elim'].append(self.data.arc_elimination)
         result['Delta type'].append(self.data.Delta_type)
         result['use kkt'].append(self.use_KKT)
@@ -1187,59 +950,14 @@ class OneStageModelFullMultiplierDepends():
                 result['obj'].append('Infeasible')
                 result['gap'].append('unknown')
 
-
         return result
 
 
-    def present_solutions(self):
-        print('print the solutions: z')
-        for key in self.var.z:
-            if self.var.z[key].X > 1e-4:
-                print(key, self.var.z[key].X)
-        print('print the solutions: x')
-        for key in self.var.x:
-            if self.var.x[key].X > 1e-4:
-                print(key, self.var.x[key].X)
-        print('print the solutions: y')
-        for key in self.var.y:
-            if self.var.y[key].X > 1e-4:
-                print(key, self.var.y[key].X)
-
-
-
-    def collect_out_sample_solution_info(self, solution_type):
-        # out of sample cost
-        obj_out_sample_info = {'Scenario': self.data.Scenarios,
-                               'solution type':solution_type,
-                               'Facility cost': sum(
-            self.data.Beta_hl[h, l] * self.var.z[h, l].X for (h, l) in self.data.Hub_pairs),
-                               'Transport cost (leader)': sum(self.data.Scenarios_prob[s]*sum(
-                self.data.Trip_p_amount[s,r] * (sum(
-                    self.data.tao_leader[h, l, s] * self.var.x[s, r, h, l].X for (h, l) in
-                    self.data.Hub_pairs) + sum(
-                    self.data.gamma_leader[i, j, s] * self.var.y[s, r, i, j].X for (i, j) in self.data.Node_pairs_for_mdl_sp[r])) for r
-                in self.data.Trips) for s in
-            self.data.Scenarios),
-                               'Transport cost (follower)': sum(self.data.Scenarios_prob[s] * sum(
-                                       self.data.Trip_p_amount[s,r] * (sum(
-                                           self.data.tao_follower[h, l, s] * self.var.x[s, r, h, l].X for (h, l) in
-                                           self.data.Hub_pairs) + sum(
-                                           self.data.gamma_follower[i, j, s] * self.var.y[s, r, i, j].X for (i, j) in
-                                           self.data.Node_pairs_for_mdl_sp[r])) for r
-                                       in self.data.Trips) for s in
-                                   self.data.Scenarios)
-                               }
-        df_obj_out_sample = pd.DataFrame.from_dict(obj_out_sample_info)
-        df_obj_out_sample['Total = Facility cost + Transport cost (leader)'] = df_obj_out_sample['Facility cost'] + \
-                                                                               df_obj_out_sample[
-                                                                                   'Transport cost (leader)']
-        df_obj_out_sample['Stochastic is better'] = None
-
-        return df_obj_out_sample
-
-
 class OneLayerModel():
-    """dr and fr are identical, one layer model"""
+    """
+    One level model with leader and follower constraints and leader obj. The follower obj is not considered.
+    dr and fr are identical, one layer model
+    """
     def __init__(self, data: Modeldata, use_KKT=False, use_sos1=False, add_strong_dual=False):
         """
         initial function
@@ -1394,30 +1112,9 @@ class OneLayerModel():
             return obj_leader
         self.leader_obj = {(s,r): cal_obj(s,r) for (s,r) in self.data.Sce_Trip}
 
-
-
-    def update_result_record(self, result, read_data_time):
-        """
-        # update result record
-        :param result: the result records to be updated
-        :param read_data_time: time for reading modeldata
-        :return: no return
-        """
-        result['node-hub-trip-passenger'].append(re.findall(r'\d+', self.data.file_name)[:4])
-        result['arc elim'].append(self.data.arc_elimination)
-        result['Delta type'].append(self.data.Delta_type)
-        result['use kkt'].append(self.use_KKT)
-        result['use sos1'].append(self.use_sos1)
-        result['use strong duality'].append(self.add_strong_dual)
-        result['time read data'].append(read_data_time)
-        result['time model creation'].append(self.time_mdl_creation)
-        result['solution time'].append(self.solution_time)
-
-        return result
-
     def update_result_record_ccg_form(self, result, read_data_time, tag):
         result['file_name'].append(os.path.basename(self.data.file_name)[:-4])
-        result['node-hub-trip-passenger'].append(re.findall(r'\d+', self.data.file_name)[:4])
+        result['node-hub-trip-passenger'].append(re.findall(r'\d+', os.path.basename(self.data.file_name))[:4])
         result['tag'].append(tag)
         result['agg_cut'].append(True)
         result['arc elim'].append(True)
@@ -1466,23 +1163,6 @@ class OneLayerModel():
             result['ave iter preprocess'].append(0)
 
         return result
-
-
-    def present_solutions(self):
-        print('print the solutions: z')
-        for key in self.var.z:
-            if self.var.z[key].X > 1e-4:
-                print(key, self.var.z[key].X)
-        print('print the solutions: x')
-        for key in self.var.x:
-            if self.var.x[key].X > 1e-4:
-                print(key, self.var.x[key].X)
-        print('print the solutions: y')
-        for key in self.var.y:
-            if self.var.y[key].X > 1e-4:
-                print(key, self.var.y[key].X)
-
-
 
     def collect_solution_info(self, solution_type):
         """
@@ -1606,9 +1286,6 @@ class OneLayerModel():
             for (h, l) in opened_hl_pairs]  # how many times is the hub pari used
         df_hub_info = pd.DataFrame.from_dict(hub_info, orient='columns')
 
-
-
-
         # objective information
         obj_info = {'Facility cost': sum(self.data.Beta_hl[h, l] * self.varValue.z[h, l] for (h, l) in self.data.Hub_pairs),
                     'Transport cost (leader)':sum(
@@ -1678,162 +1355,9 @@ class OneLayerModel():
 
         return df_trip_info.copy(), df_hub_info.copy(), obj_info.copy(), df_obj_detail_info.copy()
 
-def write_result(file_name=None):
-    # write result
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    upper_2_dir = os.path.dirname(current_directory)
-    tmp = os.path.join(upper_2_dir, 'output')
-    if file_name is None:
-        file_name = os.path.join(tmp, 'result_CCG.xlsx')
-    else:
-        file_name = os.path.join(tmp, file_name)
-
-    df = pd.DataFrame.from_dict(result, orient='columns')
-    df.to_excel(file_name, index=False)
-
 def write_result_KKT(result_kkt, numerical_result_file):
     # write result
     df = pd.DataFrame.from_dict(result_kkt, orient='columns')
     df.to_excel(numerical_result_file, index=False)
 
-def write_solution(CCG_iterator, file_tag):
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    upper_2_dir = os.path.dirname(current_directory)
-    data_file = os.path.basename(CCG_iterator.data.file_name)[:-5]
-    output_file_prefix = os.path.join(upper_2_dir, 'output', data_file)
 
-    dict_z = {str(key): round(value) for key, value in CCG_iterator.varValue.z.items() if
-              value}
-    with open('{}_tag_{}_z_sol.json'.format(output_file_prefix, file_tag,
-                                               ), 'w') as json_file:
-        json.dump(dict_z, json_file, indent=4)
-    dict_x = {str(key): round(value) for key, value in CCG_iterator.varValue.x.items() if
-              value}
-    with open('{}_tag_{}_x_sol.json'.format(output_file_prefix, file_tag,
-                                               ), 'w') as json_file:
-        json.dump(dict_x, json_file, indent=4)
-    dict_y = {str(key): round(value) for key, value in CCG_iterator.varValue.y.items() if
-              value}
-    with open('{}_tag_{}_y_sol.json'.format(output_file_prefix, file_tag,
-                                               ), 'w') as json_file:
-        json.dump(dict_y, json_file, indent=4)
-
-    return dict_z, dict_x, dict_y
-
-
-
-if __name__ == '__main__':
-    result = {'node-hub-trip-passenger': [],
-              'tag': [],
-              'agg_cut': [],
-              'parallel method':[],
-              'arc elim': [],
-              'Delta type': [],
-              'lp warm start': [],
-              'solution approach': [],
-              'time read data': [],
-              'time model creation': [],
-              'solution time': [],
-              'total solution time': [],
-              'solution time MP': [],
-              'total solution time MP': [],
-              'solution time SP': [],
-              'total solution time SP': [],
-              'time retrieve MP info': [],
-              'total time retrieve MP info': [],
-              'time retrieve SP info': [],
-              'total time retrieve SP info': [],
-              'time update MP': [],
-              'total time update MP': [],
-              'time update SP': [],
-              'total time update SP': [],
-              'LB record': [],
-              'UB record': [],
-              'final_lb': [],
-              'final_ub': [],
-              'gap': [],
-              'pure solve time': [],
-              'n iters': [],
-              'n_cut_each_iter': []
-              }
-
-    result_kkt = {
-                  'file_name': [],
-                  'node-hub-trip-passenger': [],
-                  'arc elim': [],
-                  'Delta type': [],
-                  'use kkt': [],
-                  'use sos1': [],
-                  'use bigM': [],
-                  'use strong duality': [],
-                  'time read data': [],
-                  'time model creation': [],
-                  'solution time': [],
-                  'obj':[],
-                  'gap':[],
-                  'n_node_BnB': [],  # number of explored BnB nodes
-    }
-
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    upper_2_dir = os.path.dirname(current_directory)
-    file_path = os.path.join(upper_2_dir, 'data', 'small_network')
-    file_list = os.listdir(file_path)
-    file_list_original = [i for i in file_list if '.xlsx' in i]
-    file_list = [os.path.join(file_path, f) for f in file_list_original]
-    file_list.sort()
-    console_output_file = os.path.join(upper_2_dir, 'output', 'console_info.txt')
-    numerical_result_file = os.path.join(upper_2_dir, 'output', 'cal_result.xlsx')
-    out_sample_file = os.path.join(upper_2_dir, 'data', 'sample', 'sample-keep6hubs.xlsx')
-    with open(console_output_file, 'a') as file:
-        print('files to be executed: \n', file=file)
-        for file_name in file_list:
-            print(file_name, file=file)
-
-    for file_name in file_list:
-        with open(console_output_file, 'a') as file:
-            print('================BEGIN NEW FILE======================', file=file)
-            print('execute: ' + file_name, file=file)
-        df_result = pd.DataFrame()
-
-        try:
-            for arc_elimination in [False]:
-                for Delta_type in ['MST']:
-                    with open(console_output_file, 'a') as file:
-                        print('(arc elimination={}, Delta type={}) reading data .....'.format(arc_elimination, Delta_type), file=file)
-                    tmp = time.time()
-                    modeldata = Modeldata(file_name=file_name, arc_elimination=arc_elimination, Delta_type=Delta_type, Delta_value=5)
-                    read_data_time = time.time() - tmp  # time for data reading
-
-                    """original KKT/strong duality reformulation"""
-                    try:
-                        # use KKT, use bigM
-                        reform_KKT_bigM = OneStageModelFullMultiplierDepends(data=modeldata, use_KKT=True, use_sos1=False, use_bigM=True, add_strong_dual=False)
-                        reform_KKT_bigM.solve_model()
-                        result_kkt = reform_KKT_bigM.update_result_record(result = result_kkt, read_data_time=read_data_time)
-                        write_result_KKT(result_kkt, numerical_result_file)
-                        del reform_KKT_bigM
-
-
-                        # use KKT, use sos1
-                        reform_KKT_sos1 = OneStageModelFullMultiplierDepends(data=modeldata, use_KKT=True, use_sos1=True, use_bigM=False, add_strong_dual=False)
-                        reform_KKT_sos1.solve_model()
-                        result_kkt = reform_KKT_sos1.update_result_record(result=result_kkt, read_data_time=read_data_time)
-                        write_result_KKT(result_kkt, numerical_result_file)
-                        del reform_KKT_sos1
-
-                        # use strong duality
-                        reform_KKT_strongDual = OneStageModelFullMultiplierDepends(data=modeldata, use_KKT=True, use_sos1=False, use_bigM=False, add_strong_dual=True)
-                        reform_KKT_strongDual.solve_model()
-                        result_kkt = reform_KKT_strongDual.update_result_record(result=result_kkt, read_data_time=read_data_time)
-                        write_result_KKT(result_kkt, numerical_result_file)
-                        del reform_KKT_strongDual
-
-                    except Exception as e:
-                        with open(console_output_file, 'a') as file:
-                            content = file_name + ' :calculate terminated'
-                            print(content, file=file)
-                            print(e, file=file)
-
-        except Exception as e:
-            with open(console_output_file, 'a') as file:
-                print(file_name, e, ':calculate terminated at the end line.', file=file)
