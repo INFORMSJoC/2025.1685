@@ -32,7 +32,6 @@ class Modeldata:
         :param file_name: input file name
         :param arc_elimination: whether eliminate cut and remain only sparse ones
         :param Delta_type: bigM: all arcs are available; halfBigM: bigM/2; MST: minimum spanning tree, rational routes
-        :param keep_all: Whether keep information of all arcs
         """
         self.file_name = file_name
         self.leader_theta_given = leader_theta_given
@@ -313,7 +312,7 @@ class Modeldata:
             Delta = {'High': Delta_high_income * 1.02, 'Low': Delta_low_income * 1.02,
                      'Middle': Delta_middle_income * 1.02}
         else:
-            raise 'unknown Delta type: {}'.format(self.Delta_type)
+            raise ValueError('unknown Delta type: {}'.format(self.Delta_type))
 
         return Delta
 

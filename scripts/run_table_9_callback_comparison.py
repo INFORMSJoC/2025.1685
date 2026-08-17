@@ -65,7 +65,7 @@ if __name__ == '__main__':
                                                  revise_dual_value=False,
                                                  n_tree_iter_max=0,
                                                  )
-                CCG_iterator_stoch.start_Benders_iteration_callback(timelimit=CCG_timelimit, use_i_ccg=False)
+                CCG_iterator_stoch.start_Benders_iteration_callback(timelimit=CCG_timelimit)
                 result1 = CCG_iterator_stoch.update_result_ccg(result=result1,
                                                         read_data_time=read_data_time, tag='callbackCCG')
                 write_result(file_name=out_xlsx_file, result=result1)
@@ -77,7 +77,7 @@ if __name__ == '__main__':
                                                  revise_dual_value=False,
                                                  n_tree_iter_max=100,
                                                  )
-                CCG_iterator_stoch.start_Benders_iteration_callback(timelimit=CCG_timelimit, use_i_ccg=False)
+                CCG_iterator_stoch.start_Benders_iteration_callback(timelimit=CCG_timelimit)
                 result1 = CCG_iterator_stoch.update_result_ccg(result=result1,
                                                         read_data_time=read_data_time, tag='callbackCCG-tree100')
                 write_result(file_name=out_xlsx_file, result=result1)
